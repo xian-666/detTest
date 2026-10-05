@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{7E231283-C2A9-46E5-81F6-8308615331AC}</ProjectGuid>
+    <RootNamespace>detTest</RootNamespace>
+    <ProjectName>detTest</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <!-- Release ships as a GUI-subsystem app; a console is allocated on demand only
+         when config.ini [Log] console = true (see ShowConsole() in detTest.cpp). -->
+    <SubSystem>Windows</SubSystem>
+    <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>$(WindowsSDK_IncludePath);../opencv4.8.0/opencv/build/include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>$(WindowsSDK_IncludePath);../opencv4.8.0/opencv/build/include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+;NOMINMAX
+;_AMD64_;MODEL_ENCRYPT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>../;..\DirectML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>..\DirectML\lib;../opencv4.8.0/opencv/build/x64/vc16/lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>onnxruntime.lib;opencv_world480d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /D "$(ProjectDir)HONOR" "$(OutDir)"
+xcopy /Y /D "$(ProjectDir)roi_adaptation.json" "$(OutDir)"
+xcopy /Y /D "$(ProjectDir)config.ini" "$(OutDir)"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;_WIN32_WINNT=0x0A00;_CRT_SECURE_NO_WARNINGS;_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+;NOMINMAX
+;_AMD64_;MODEL_ENCRYPT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>../;..\DirectML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>../opencv4.8.0/opencv/build/x64/vc16/lib;..\DirectML\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>onnxruntime.lib;opencv_world480.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /D "$(ProjectDir)HONOR" "$(OutDir)"
+xcopy /Y /D "$(ProjectDir)roi_adaptation.json" "$(OutDir)"
+xcopy /Y /D "$(ProjectDir)config.ini" "$(OutDir)"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Component\AES.cpp" />
+    <ClCompile Include="..\Component\BaseUtility.cpp" />
+    <ClCompile Include="..\Component\DumpHelper.cpp" />
+    <ClCompile Include="..\Component\Log\debugLog.cpp" />
+    <ClCompile Include="..\Component\Log\ServerLog.cpp" />
+    <ClCompile Include="..\Component\RegistryReader.cpp" />
+    <ClCompile Include="common\AppConfig.cpp" />
+    <ClCompile Include="CaptureMetrics.cpp" />
+    <ClCompile Include="detTest.cpp" />
+    <ClCompile Include="GameInferenceSystem.cpp" />
+    <ClCompile Include="ONNXInference.cpp" />
+    <ClCompile Include="ROIAdaptationConfig.cpp" />
+    <ClCompile Include="Screen\DXGIScreenCapture.cpp" />
+    <ClCompile Include="Screen\GpuEnvironmentProbe.cpp" />
+    <ClCompile Include="Screen\ScreenShot.cpp" />
+    <ClCompile Include="Screen\UnifiedScreenCapture.cpp" />
+    <ClCompile Include="Screen\WGCScreenCapture.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Component\AES.h" />
+    <ClInclude Include="..\Component\BaseUtility.hpp" />
+    <ClInclude Include="..\Component\BTSafeQueue.h" />
+    <ClInclude Include="..\Component\DumpHelper.h" />
+    <ClInclude Include="..\Component\LogConfigReader.hpp" />
+    <ClInclude Include="..\Component\Log\debugLog.h" />
+    <ClInclude Include="..\Component\Log\ServerLog.h" />
+    <ClInclude Include="..\Component\Queue\atomicops.h" />
+    <ClInclude Include="..\Component\Queue\concurrentqueue.h" />
+    <ClInclude Include="..\Component\Queue\readerwriterqueue.h" />
+    <ClInclude Include="..\Component\RegistryReader.h" />
+    <ClInclude Include="..\Component\StringUtility.hpp" />
+    <ClInclude Include="..\Component\ThreadPool\SafeQueue.h" />
+    <ClInclude Include="..\Component\ThreadPool\ThreadPool.h" />
+    <ClInclude Include="CaptureMetrics.h" />
+    <ClInclude Include="common\AppConfig.h" />
+    <ClInclude Include="common\common.hpp" />
+    <ClInclude Include="common\DebugFileLog.h" />
+    <ClInclude Include="common\EdgeDetector.hpp" />
+    <ClInclude Include="common\IDevice.hpp" />
+    <ClInclude Include="common\IScreenshotProvider.hpp" />
+    <ClInclude Include="common\MosaicUtils.hpp" />
+    <ClInclude Include="common\Protocol.hpp" />
+    <ClInclude Include="common\ROIScaleManager.hpp" />
+    <ClInclude Include="common\RoiIndex.hpp" />
+    <ClInclude Include="common\ScreenAspectDetector.hpp" />
+    <ClInclude Include="common\SystemUtils.hpp" />
+    <ClInclude Include="common\TargetWindow.h" />
+    <ClInclude Include="GameInferenceSystem.h" />
+    <ClInclude Include="ImageSaver.h" />
+    <ClInclude Include="ONNXInference.h" />
+    <ClInclude Include="ROIAdaptationConfig.h" />
+    <ClInclude Include="Screen\DXGIScreenCapture.h" />
+    <ClInclude Include="Screen\GpuEnvironmentProbe.h" />
+    <ClInclude Include="Screen\ScreenShot.h" />
+    <ClInclude Include="Screen\UnifiedScreenCapture.h" />
+    <ClInclude Include="Screen\WGCScreenCapture.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="config.ini">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="HONOR">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="roi_adaptation.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+  <Target Name="CopyDepsDlls" AfterTargets="Build">
+    <PropertyGroup>
+      <OpenCVDllSuffix Condition="'$(Configuration)'=='Debug'">d</OpenCVDllSuffix>
+      <OpenCVDllSuffix Condition="'$(Configuration)'!='Debug'">
+      </OpenCVDllSuffix>
+    </PropertyGroup>
+    <ItemGroup>
+      <DllFiles Include="..\DirectML\lib\DirectML.dll" />
+      <DllFiles Include="..\DirectML\lib\onnxruntime.dll" />
+      <DllFiles Include="..\opencv4.8.0\opencv\build\$(Platform)\vc16\bin\opencv_world480$(OpenCVDllSuffix).dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DllFiles)" DestinationFolder="$(OutDir)" Condition="Exists('%(DllFiles.FullPath)')" />
+  </Target>
+</Project>

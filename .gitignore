@@ -1,0 +1,41 @@
+node_modules/
+*.log
+.DS_Store
+.env
+__pycache__/
+*.class
+target/
+.vs/
+.vscode/
+x64/
+x86/
+Debug/
+Release/
+
+# ---- Third-party SDK/dependency trees (not part of this repo) ----
+readerwriterqueue-master/
+opencv4.8.0/
+onnxruntime-win-x64-gpu-1.23.2/
+hidapi-win/
+DirectML/
+
+# ---- Generated Visual Studio artifacts ----
+*.aps
+*.VC.db
+*.VC.opendb
+*.user
+*.suo
+enc_temp_folder/
+
+FIXES_SUMMARY.md
+WGC_CRASH_FIX_SUMMARY.md
+*.py
+*.txt
+*.png
+*.ps1
+detTest/copy_resources.bat
+detTest/HONOR1
+
+# ---- Project tooling that must stay in the repo ----
+!check_ascii.ps1
+!tools/

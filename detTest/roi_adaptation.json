@@ -1,0 +1,1620 @@
+{
+  "_comment": "ROI adaptation v2.1 - 16:10 group user-verified. 1280x800 (16:10) is canonical anchor. 1440x900 and 1680x1050 derived from 1280x800 by target scaling. 1280x1024 (5:4) and 1600x1024 (25:16) are user-verified overrides for non-16:10 aspects.",
+  "_version": "2.1",
+  "_coord_convention": "All residual values are integer pixel offsets applied AFTER Stage-1 truncation. dx/dy are added to x/y; dw/dh are added to w/h. min(10,...) floor still applies for w/h.",
+  "_21_9_note": "21:9 ultrawide support added in v2.2. ScreenAspectDetector reads GameUserSettings.ini to determine physical aspect ratio. When aspectCategory=21:9, the specifiedResolutions entries below override the standard 16:9 residuals for the same render resolution.",
+  "baseTransform": {
+    "referenceWidth": 1920,
+    "referenceHeight": 1080,
+    "uniformScaleFormula": "min(targetW/refW, targetH/refH)",
+    "centering": "remaining_space_centered"
+  },
+  "aspectProfiles": [
+    {
+      "aspectGroup": "4:3",
+      "targetAspect": 1.333333,
+      "tolerance": 0.02,
+      "baseTransform": {
+        "xBias": 6,
+        "yBias": 15,
+        "sizeScale": 0.5
+      },
+      "scaleLaw": {
+        "type": "target_relative",
+        "formula": "predicted = round(canonical_target * W/canonicalW); residual = predicted - stage1",
+        "_note": "4:3 group: scale absolute targets linearly by W/canonicalW. Handles unregistered 4:3 resolutions like 1920x1440, 1600x1200."
+      },
+      "canonicalAnchor": {
+        "width": 1024,
+        "height": 768,
+        "_note": "User-verified 4:3 anchor. canonicalTargets used as fallback for unregistered 4:3 resolutions."
+      },
+      "canonicalTargets": {
+        "Switch": [ 954, 916, 39, 37 ],
+        "LsRs": [ 930, 1045, 52, 51 ],
+        "LB_1": [ 815, 1045, 29, 30 ],
+        "RB_1": [ 875, 1045, 29, 30 ],
+        "LT_1": [ 815, 1109, 29, 30 ],
+        "RT_1": [ 875, 1109, 29, 30 ],
+        "LB_2": [ 799, 1078, 29, 31 ],
+        "LT_2": [ 846, 1078, 29, 31 ],
+        "RT_2": [ 893, 1078, 29, 31 ]
+      }
+    },
+    {
+      "aspectGroup": "16:9",
+      "targetAspect": 1.777778,
+      "tolerance": 0.02,
+      "baseTransform": {
+        "xBias": 2,
+        "yBias": 4,
+        "sizeScale": 0.85
+      }
+    },
+    {
+      "aspectGroup": "16:10",
+      "targetAspect": 1.6,
+      "tolerance": 0.02,
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "scaleLaw": {
+        "type": "target_relative",
+        "formula": "predicted_target(W) = round(canonical_target * W/1280); residual = predicted_target - stage1(W, H)",
+        "_note": "16:10 group: scale canonical TARGET (not residual) by W/1280. Specific entries (1280x800, 1440x900, 1680x1050) override this profile."
+      },
+      "canonicalAnchor": {
+        "width": 1280,
+        "height": 800,
+        "_note": "User-verified 16:10 anchor. canonicalTargets used as fallback for unregistered 16:10 resolutions."
+      },
+      "canonicalTargets": {
+        "Switch": [
+          1195,
+          626,
+          48,
+          48
+        ],
+        "LsRs": [
+          1163,
+          714,
+          62,
+          62
+        ],
+        "LB_1": [
+          1020,
+          713,
+          37,
+          37
+        ],
+        "RB_1": [
+          1096,
+          713,
+          37,
+          37
+        ],
+        "LT_1": [
+          1020,
+          757,
+          37,
+          37
+        ],
+        "RT_1": [
+          1096,
+          757,
+          37,
+          37
+        ],
+        "LB_2": [
+          999,
+          735,
+          37,
+          37
+        ],
+        "LT_2": [
+          1052,
+          735,
+          37,
+          37
+        ],
+        "RT_2": [
+          1105,
+          735,
+          37,
+          37
+        ]
+      }
+    },
+    {
+      "aspectGroup": "5:4",
+      "targetAspect": 1.25,
+      "tolerance": 0.02,
+      "baseTransform": {
+        "xBias": 3,
+        "yBias": 20,
+        "sizeScale": 0.58
+      }
+    },
+    {
+      "aspectGroup": "25:16",
+      "targetAspect": 1.5625,
+      "tolerance": 0.02,
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "_note": "25:16 (1.5625). Single registered entry: 1600x1024 (user-verified). No scale law — only one data point."
+    },
+    {
+      "aspectGroup": "21:9",
+      "targetAspect": 2.333333,
+      "tolerance": 0.15,
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "canonicalAnchor": {
+        "width": 2560,
+        "height": 1440,
+        "_note": "Native 21:9 anchor. User-verified 2560x1440 data from honor.txt."
+      },
+      "canonicalTargets": {
+        "Switch": [ 2391, 1092, 97, 97 ],
+        "LsRs": [ 2327, 1266, 124, 124 ],
+        "LB_1": [ 2037, 1265, 78, 78 ],
+        "RB_1": [ 2190, 1265, 78, 78 ],
+        "LT_1": [ 2037, 1350, 78, 78 ],
+        "RT_1": [ 2190, 1350, 78, 78 ],
+        "LB_2": [ 1995, 1308, 78, 78 ],
+        "LT_2": [ 2101, 1308, 78, 78 ],
+        "RT_2": [ 2207, 1308, 78, 78 ]
+      },
+      "scaleLaw": {
+        "type": "target_relative",
+        "formula": "predicted = round(canonical_target * W/canonicalW); residual = predicted - stage1",
+        "_note": "Scale absolute targets linearly by W/canonicalW. Handles unregistered 21:9 resolutions."
+      },
+      "_note": "21:9 ultrawide. Physical aspect >= 2.2. Specific resolutions: 1920x1080 (21:9), 2560x1440, 3440x1440. canonicalTargets enable derivation for any 21:9 resolution."
+    }
+  ],
+  "specificResolutions": [
+    {
+      "width": 1024,
+      "height": 768,
+      "aspectGroup": "4:3",
+      "baseTransform": {
+        "xBias": 6,
+        "yBias": 15,
+        "sizeScale": 0.5
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -1,
+          "dy": 95,
+          "dw": 4,
+          "dh": 3
+        },
+        "LsRs": {
+          "dx": 2,
+          "dy": 97,
+          "dw": -2,
+          "dh": -1
+        },
+        "LB_1": {
+          "dx": -1,
+          "dy": 95,
+          "dw": 2,
+          "dh": 3
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": 95,
+          "dw": 2,
+          "dh": 3
+        },
+        "LT_1": {
+          "dx": -1,
+          "dy": 94,
+          "dw": 2,
+          "dh": 3
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 94,
+          "dw": 2,
+          "dh": 3
+        },
+        "LB_2": {
+          "dx": -1,
+          "dy": 96,
+          "dw": 2,
+          "dh": 0
+        },
+        "LT_2": {
+          "dx": 0,
+          "dy": 96,
+          "dw": 2,
+          "dh": 0
+        },
+        "RT_2": {
+          "dx": 0,
+          "dy": 96,
+          "dw": 2,
+          "dh": 0
+        }
+      },
+      "_note": "User-verified 4:3."
+    },
+    {
+      "width": 1152,
+      "height": 864,
+      "aspectGroup": "4:3",
+      "baseTransform": {
+        "xBias": 8,
+        "yBias": 15,
+        "sizeScale": 0.45
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -1,
+          "dy": 106,
+          "dw": 5,
+          "dh": 4
+        },
+        "LsRs": {
+          "dx": 2,
+          "dy": 109,
+          "dw": -2,
+          "dh": -2
+        },
+        "LB_1": {
+          "dx": -1,
+          "dy": 106,
+          "dw": 2,
+          "dh": 3
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": 106,
+          "dw": 2,
+          "dh": 3
+        },
+        "LT_1": {
+          "dx": -1,
+          "dy": 105,
+          "dw": 2,
+          "dh": 3
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 105,
+          "dw": 2,
+          "dh": 3
+        },
+        "LB_2": {
+          "dx": -1,
+          "dy": 107,
+          "dw": 2,
+          "dh": 0
+        },
+        "LT_2": {
+          "dx": 0,
+          "dy": 107,
+          "dw": 2,
+          "dh": 0
+        },
+        "RT_2": {
+          "dx": -1,
+          "dy": 107,
+          "dw": 2,
+          "dh": 0
+        }
+      },
+      "_note": "User-verified 4:3 (4:3 letterbox)."
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "aspectGroup": "16:9",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LsRs": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_1": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LT_1": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_1": {
+          "dx": -2,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_2": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LT_2": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_2": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        }
+      },
+      "_note": "Derived from 1600x900 user-verified via 0.8x target scaling (1280/1600)."
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "aspectGroup": "16:9",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -2,
+          "dy": -1,
+          "dw": 5,
+          "dh": 3
+        },
+        "LsRs": {
+          "dx": 5,
+          "dy": 2,
+          "dw": -5,
+          "dh": -4
+        },
+        "LB_1": {
+          "dx": 0,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "LT_1": {
+          "dx": 0,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "RT_1": {
+          "dx": -1,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "LB_2": {
+          "dx": -2,
+          "dy": 0,
+          "dw": 2,
+          "dh": -2
+        },
+        "LT_2": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 2,
+          "dh": -2
+        },
+        "RT_2": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 2,
+          "dh": -2
+        }
+      },
+      "_note": "User-verified 1920x1080 on 16:9 screen. Direct measurement."
+    },
+    {
+      "width": 1280,
+      "height": 768,
+      "aspectGroup": "5:3",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": 1,
+          "dy": 24,
+          "dw": 2,
+          "dh": 1
+        },
+        "LsRs": {
+          "dx": 4,
+          "dy": 26,
+          "dw": -7,
+          "dh": -6
+        },
+        "LB_1": {
+          "dx": 1,
+          "dy": 25,
+          "dw": -1,
+          "dh": -1
+        },
+        "RB_1": {
+          "dx": 1,
+          "dy": 25,
+          "dw": -1,
+          "dh": -1
+        },
+        "LT_1": {
+          "dx": 1,
+          "dy": 25,
+          "dw": -1,
+          "dh": -1
+        },
+        "RT_1": {
+          "dx": 1,
+          "dy": 25,
+          "dw": -1,
+          "dh": -1
+        },
+        "LB_2": {
+          "dx": 1,
+          "dy": 26,
+          "dw": -1,
+          "dh": -4
+        },
+        "LT_2": {
+          "dx": 2,
+          "dy": 26,
+          "dw": -1,
+          "dh": -4
+        },
+        "RT_2": {
+          "dx": 2,
+          "dy": 26,
+          "dw": -1,
+          "dh": -4
+        }
+      },
+      "_note": "User-verified 5:3 (1280/768 = 1.667). 16:9 STAGE 1 with user-measured residualCorrection."
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "aspectGroup": "16:10",
+      "baseTransform": {
+        "xBias": 5,
+        "yBias": 3,
+        "sizeScale": 0.75
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -1,
+          "dy": 39,
+          "dw": 4,
+          "dh": 3
+        },
+        "LsRs": {
+          "dx": 2,
+          "dy": 42,
+          "dw": -3,
+          "dh": -2
+        },
+        "LB_1": {
+          "dx": 1,
+          "dy": 40,
+          "dw": 1,
+          "dh": 1
+        },
+        "RB_1": {
+          "dx": 0,
+          "dy": 40,
+          "dw": 1,
+          "dh": 1
+        },
+        "LT_1": {
+          "dx": 1,
+          "dy": 41,
+          "dw": 1,
+          "dh": 1
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 41,
+          "dw": 1,
+          "dh": 1
+        },
+        "LB_2": {
+          "dx": 0,
+          "dy": 41,
+          "dw": 1,
+          "dh": -2
+        },
+        "LT_2": {
+          "dx": 1,
+          "dy": 41,
+          "dw": 1,
+          "dh": -2
+        },
+        "RT_2": {
+          "dx": 1,
+          "dy": 41,
+          "dw": 1,
+          "dh": -2
+        }
+      },
+      "_note": "User-verified 16:10 canonical anchor."
+    },
+    {
+      "width": 1280,
+      "height": 960,
+      "aspectGroup": "4:3",
+      "baseTransform": {
+        "xBias": 3,
+        "yBias": -1,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "LT_1": {
+          "dx": 2,
+          "dy": 120,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_1": {
+          "dx": 1,
+          "dy": 120,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_1": {
+          "dx": 2,
+          "dy": 120,
+          "dw": 0,
+          "dh": 0
+        },
+        "RB_1": {
+          "dx": 1,
+          "dy": 120,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_2": {
+          "dx": 0,
+          "dy": 121,
+          "dw": 0,
+          "dh": -3
+        },
+        "LT_2": {
+          "dx": 1,
+          "dy": 121,
+          "dw": 0,
+          "dh": -3
+        },
+        "RT_2": {
+          "dx": 0,
+          "dy": 121,
+          "dw": 0,
+          "dh": -3
+        },
+        "LsRs": {
+          "dx": 1,
+          "dy": 121,
+          "dw": -2,
+          "dh": -1
+        },
+        "Switch": {
+          "dx": 0,
+          "dy": 118,
+          "dw": 4,
+          "dh": 3
+        }
+      },
+      "_note": "User-verified 4:3 (windowed)."
+    },
+    {
+      "width": 1280,
+      "height": 1024,
+      "aspectGroup": "5:4",
+      "baseTransform": {
+        "xBias": 3,
+        "yBias": 20,
+        "sizeScale": 0.58
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -2,
+          "dy": 150,
+          "dw": 6,
+          "dh": 5
+        },
+        "LsRs": {
+          "dx": 2,
+          "dy": 154,
+          "dw": -3,
+          "dh": -2
+        },
+        "LB_1": {
+          "dx": 0,
+          "dy": 151,
+          "dw": 2,
+          "dh": 2
+        },
+        "RB_1": {
+          "dx": 0,
+          "dy": 151,
+          "dw": 2,
+          "dh": 2
+        },
+        "LT_1": {
+          "dx": 0,
+          "dy": 151,
+          "dw": 2,
+          "dh": 2
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 151,
+          "dw": 2,
+          "dh": 2
+        },
+        "LB_2": {
+          "dx": -1,
+          "dy": 152,
+          "dw": 2,
+          "dh": -1
+        },
+        "LT_2": {
+          "dx": 1,
+          "dy": 152,
+          "dw": 2,
+          "dh": -1
+        },
+        "RT_2": {
+          "dx": 1,
+          "dy": 152,
+          "dw": 2,
+          "dh": -1
+        }
+      },
+      "_note": "User-verified 5:4."
+    },
+    {
+      "width": 1360,
+      "height": 768,
+      "aspectGroup": "16:9",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "LT_1": {
+          "dx": 0,
+          "dy": 1,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 1,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_1": {
+          "dx": 0,
+          "dy": 1,
+          "dw": 0,
+          "dh": 0
+        },
+        "RB_1": {
+          "dx": 0,
+          "dy": 1,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_2": {
+          "dx": 1,
+          "dy": 1,
+          "dw": 0,
+          "dh": 0
+        },
+        "LT_2": {
+          "dx": 0,
+          "dy": 1,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_2": {
+          "dx": 0,
+          "dy": 1,
+          "dw": 0,
+          "dh": 0
+        },
+        "LsRs": {
+          "dx": 0,
+          "dy": 1,
+          "dw": 0,
+          "dh": 0
+        }
+      }
+    },
+    {
+      "width": 1366,
+      "height": 768,
+      "aspectGroup": "16:9",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "RT_1": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LsRs": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 1
+        },
+        "Switch": {
+          "dx": 1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        }
+      }
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "aspectGroup": "16:10",
+      "baseTransform": {
+        "xBias": 8,
+        "yBias": 2,
+        "sizeScale": 0.7
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -2,
+          "dy": 44,
+          "dw": 5,
+          "dh": 3
+        },
+        "LsRs": {
+          "dx": 2,
+          "dy": 47,
+          "dw": -3,
+          "dh": -2
+        },
+        "LB_1": {
+          "dx": 2,
+          "dy": 45,
+          "dw": 1,
+          "dh": 2
+        },
+        "RB_1": {
+          "dx": 0,
+          "dy": 45,
+          "dw": 1,
+          "dh": 2
+        },
+        "LT_1": {
+          "dx": 2,
+          "dy": 44,
+          "dw": 1,
+          "dh": 2
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 44,
+          "dw": 1,
+          "dh": 2
+        },
+        "LB_2": {
+          "dx": 0,
+          "dy": 46,
+          "dw": 1,
+          "dh": -2
+        },
+        "LT_2": {
+          "dx": 2,
+          "dy": 46,
+          "dw": 1,
+          "dh": -2
+        },
+        "RT_2": {
+          "dx": 1,
+          "dy": 46,
+          "dw": 1,
+          "dh": -2
+        }
+      },
+      "_note": "Derived from 1280x800 user-verified via 1.125x target scaling."
+    },
+    {
+      "width": 1440,
+      "height": 1080,
+      "aspectGroup": "4:3",
+      "baseTransform": {
+        "xBias": 2,
+        "yBias": 10,
+        "sizeScale": 0.7
+      },
+      "residualCorrection": {
+        "LT_1": {
+          "dx": 2,
+          "dy": 135,
+          "dw": -3,
+          "dh": -3
+        },
+        "RT_1": {
+          "dx": 1,
+          "dy": 135,
+          "dw": -3,
+          "dh": -3
+        },
+        "LB_1": {
+          "dx": 2,
+          "dy": 137,
+          "dw": -3,
+          "dh": -3
+        },
+        "RB_1": {
+          "dx": 2,
+          "dy": 137,
+          "dw": -3,
+          "dh": -3
+        },
+        "LB_2": {
+          "dx": 2,
+          "dy": 135,
+          "dw": -3,
+          "dh": -3
+        },
+        "LT_2": {
+          "dx": 2,
+          "dy": 135,
+          "dw": -3,
+          "dh": -3
+        },
+        "RT_2": {
+          "dx": 2,
+          "dy": 135,
+          "dw": -3,
+          "dh": -3
+        },
+        "LsRs": {
+          "dx": 1,
+          "dy": 140,
+          "dw": -5,
+          "dh": -5
+        },
+        "Switch": {
+          "dx": 2,
+          "dy": 136,
+          "dw": -3,
+          "dh": -4
+        }
+      }
+    },
+    {
+      "width": 1600,
+      "height": 900,
+      "aspectGroup": "16:9",
+      "baseTransform": {
+        "xBias": -1,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "LT_1": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_1": {
+          "dx": -2,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_1": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_2": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LT_2": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_2": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LsRs": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "Switch": {
+          "dx": -1,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        }
+      }
+    },
+    {
+      "width": 1600,
+      "height": 1024,
+      "aspectGroup": "25:16",
+      "baseTransform": {
+        "xBias": 3,
+        "yBias": 8,
+        "sizeScale": 0.75
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -1,
+          "dy": 60,
+          "dw": 4,
+          "dh": 3
+        },
+        "LsRs": {
+          "dx": 5,
+          "dy": 64,
+          "dw": -5,
+          "dh": -4
+        },
+        "LB_1": {
+          "dx": -1,
+          "dy": 62,
+          "dw": 3,
+          "dh": 3
+        },
+        "RB_1": {
+          "dx": 0,
+          "dy": 62,
+          "dw": 3,
+          "dh": 3
+        },
+        "LT_1": {
+          "dx": -1,
+          "dy": 61,
+          "dw": 3,
+          "dh": 3
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 61,
+          "dw": 3,
+          "dh": 3
+        },
+        "LB_2": {
+          "dx": -2,
+          "dy": 62,
+          "dw": 3,
+          "dh": -1
+        },
+        "LT_2": {
+          "dx": -1,
+          "dy": 62,
+          "dw": 3,
+          "dh": -1
+        },
+        "RT_2": {
+          "dx": -1,
+          "dy": 62,
+          "dw": 3,
+          "dh": -1
+        }
+      },
+      "_note": "User-verified 25:16 (NOT 16:10!)."
+    },
+    {
+      "width": 1680,
+      "height": 1050,
+      "aspectGroup": "16:10",
+      "baseTransform": {
+        "xBias": 3,
+        "yBias": 5,
+        "sizeScale": 0.75
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -2,
+          "dy": 52,
+          "dw": 6,
+          "dh": 4
+        },
+        "LsRs": {
+          "dx": 2,
+          "dy": 55,
+          "dw": -4,
+          "dh": -3
+        },
+        "LB_1": {
+          "dx": 2,
+          "dy": 53,
+          "dw": 1,
+          "dh": 2
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": 53,
+          "dw": 1,
+          "dh": 2
+        },
+        "LT_1": {
+          "dx": 2,
+          "dy": 52,
+          "dw": 1,
+          "dh": 2
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 52,
+          "dw": 1,
+          "dh": 2
+        },
+        "LB_2": {
+          "dx": 0,
+          "dy": 54,
+          "dw": 1,
+          "dh": -2
+        },
+        "LT_2": {
+          "dx": 2,
+          "dy": 54,
+          "dw": 1,
+          "dh": -2
+        },
+        "RT_2": {
+          "dx": 1,
+          "dy": 54,
+          "dw": 1,
+          "dh": -2
+        }
+      },
+      "_note": "Derived from 1280x800 user-verified via 1.3125x target scaling."
+    },
+    {
+      "width": 1920,
+      "height": 1200,
+      "aspectGroup": "16:10",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -1,
+          "dy": 58,
+          "dw": 4,
+          "dh": 2
+        },
+        "LsRs": {
+          "dx": 4,
+          "dy": 61,
+          "dw": -6,
+          "dh": -5
+        },
+        "LB_1": {
+          "dx": 0,
+          "dy": 58,
+          "dw": 2,
+          "dh": 3
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": 58,
+          "dw": 2,
+          "dh": 3
+        },
+        "LT_1": {
+          "dx": 0,
+          "dy": 59,
+          "dw": 2,
+          "dh": 3
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 59,
+          "dw": 2,
+          "dh": 3
+        },
+        "LB_2": {
+          "dx": -2,
+          "dy": 59,
+          "dw": 2,
+          "dh": -2
+        },
+        "LT_2": {
+          "dx": 0,
+          "dy": 59,
+          "dw": 2,
+          "dh": -2
+        },
+        "RT_2": {
+          "dx": -2,
+          "dy": 59,
+          "dw": 2,
+          "dh": -2
+        }
+      },
+      "_note": "16:10 1920x1200. Residuals = honor.txt - Stage1(base + centerY=60). User-verified."
+    },
+    {
+      "width": 2560,
+      "height": 1440,
+      "aspectGroup": "21:9",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -2,
+          "dy": -2,
+          "dw": 9,
+          "dh": 7
+        },
+        "LsRs": {
+          "dx": 5,
+          "dy": 2,
+          "dw": -6,
+          "dh": -5
+        },
+        "LB_1": {
+          "dx": -1,
+          "dy": -1,
+          "dw": 5,
+          "dh": 6
+        },
+        "RB_1": {
+          "dx": -3,
+          "dy": -1,
+          "dw": 5,
+          "dh": 6
+        },
+        "LT_1": {
+          "dx": -1,
+          "dy": -3,
+          "dw": 5,
+          "dh": 6
+        },
+        "RT_1": {
+          "dx": -2,
+          "dy": -3,
+          "dw": 5,
+          "dh": 6
+        },
+        "LB_2": {
+          "dx": -3,
+          "dy": -1,
+          "dw": 5,
+          "dh": 0
+        },
+        "LT_2": {
+          "dx": -1,
+          "dy": -1,
+          "dw": 5,
+          "dh": 0
+        },
+        "RT_2": {
+          "dx": -2,
+          "dy": -1,
+          "dw": 5,
+          "dh": 0
+        }
+      },
+      "_note": "21:9 ultrawide native render 2560x1440. User-verified."
+    },
+    {
+      "width": 3440,
+      "height": 1440,
+      "aspectGroup": "21:9",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": 437,
+          "dy": -3,
+          "dw": 10,
+          "dh": 8
+        },
+        "LsRs": {
+          "dx": 447,
+          "dy": 2,
+          "dw": -8,
+          "dh": -7
+        },
+        "LB_1": {
+          "dx": 441,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "RB_1": {
+          "dx": 439,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "LT_1": {
+          "dx": 441,
+          "dy": -2,
+          "dw": 2,
+          "dh": 3
+        },
+        "RT_1": {
+          "dx": 440,
+          "dy": -2,
+          "dw": 2,
+          "dh": 3
+        },
+        "LB_2": {
+          "dx": 439,
+          "dy": 1,
+          "dw": 2,
+          "dh": -3
+        },
+        "LT_2": {
+          "dx": 441,
+          "dy": 1,
+          "dw": 2,
+          "dh": -3
+        },
+        "RT_2": {
+          "dx": 441,
+          "dy": 1,
+          "dw": 2,
+          "dh": -3
+        }
+      },
+      "_note": "21:9 ultrawide native render 3440x1440. User-verified. Large dx due to horizontal centering shift vs 16:9 stage1."
+    },
+    {
+      "width": 1920,
+      "height": 1440,
+      "aspectGroup": "4:3",
+      "baseTransform": {
+        "xBias": 6,
+        "yBias": 15,
+        "sizeScale": 0.5
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -3,
+          "dy": 177,
+          "dw": 8,
+          "dh": 6
+        },
+        "LsRs": {
+          "dx": 6,
+          "dy": 182,
+          "dw": -9,
+          "dh": -8
+        },
+        "LB_1": {
+          "dx": -1,
+          "dy": 178,
+          "dw": 3,
+          "dh": 4
+        },
+        "RB_1": {
+          "dx": -2,
+          "dy": 178,
+          "dw": 3,
+          "dh": 4
+        },
+        "LT_1": {
+          "dx": -1,
+          "dy": 177,
+          "dw": 3,
+          "dh": 4
+        },
+        "RT_1": {
+          "dx": -1,
+          "dy": 177,
+          "dw": 3,
+          "dh": 4
+        },
+        "LB_2": {
+          "dx": -3,
+          "dy": 178,
+          "dw": 3,
+          "dh": -1
+        },
+        "LT_2": {
+          "dx": -1,
+          "dy": 178,
+          "dw": 3,
+          "dh": -1
+        },
+        "RT_2": {
+          "dx": -2,
+          "dy": 178,
+          "dw": 3,
+          "dh": -1
+        }
+      },
+      "_note": "User-verified 4:3 on 21:9 screen (1920x1440)."
+    },
+    {
+      "width": 1600,
+      "height": 1200,
+      "aspectGroup": "4:3",
+      "baseTransform": {
+        "xBias": 6,
+        "yBias": 15,
+        "sizeScale": 0.5
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -3,
+          "dy": 148,
+          "dw": 6,
+          "dh": 5
+        },
+        "LsRs": {
+          "dx": 6,
+          "dy": 151,
+          "dw": -7,
+          "dh": -6
+        },
+        "LB_1": {
+          "dx": -1,
+          "dy": 148,
+          "dw": 3,
+          "dh": 4
+        },
+        "RB_1": {
+          "dx": -2,
+          "dy": 148,
+          "dw": 3,
+          "dh": 4
+        },
+        "LT_1": {
+          "dx": -1,
+          "dy": 147,
+          "dw": 3,
+          "dh": 4
+        },
+        "RT_1": {
+          "dx": -1,
+          "dy": 147,
+          "dw": 3,
+          "dh": 4
+        },
+        "LB_2": {
+          "dx": -3,
+          "dy": 148,
+          "dw": 3,
+          "dh": -1
+        },
+        "LT_2": {
+          "dx": -1,
+          "dy": 148,
+          "dw": 3,
+          "dh": -1
+        },
+        "RT_2": {
+          "dx": -2,
+          "dy": 148,
+          "dw": 3,
+          "dh": -1
+        }
+      },
+      "_note": "User-verified 4:3 on 21:9 screen (1600x1200)."
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "aspectGroup": "21:9",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": -2,
+          "dy": -1,
+          "dw": 5,
+          "dh": 3
+        },
+        "LsRs": {
+          "dx": 5,
+          "dy": 2,
+          "dw": -5,
+          "dh": -4
+        },
+        "LB_1": {
+          "dx": 0,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "RB_1": {
+          "dx": -1,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "LT_1": {
+          "dx": 0,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": -1,
+          "dw": 2,
+          "dh": 3
+        },
+        "LB_2": {
+          "dx": -2,
+          "dy": -1,
+          "dw": 2,
+          "dh": -2
+        },
+        "LT_2": {
+          "dx": 0,
+          "dy": -1,
+          "dw": 2,
+          "dh": -2
+        },
+        "RT_2": {
+          "dx": -1,
+          "dy": -1,
+          "dw": 2,
+          "dh": -2
+        }
+      },
+      "_note": "21:9 ultrawide render 1920x1080. CRITICAL: same render res as 16:9, disambiguation via aspectCategory. User-verified."
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "aspectGroup": "16:9",
+      "baseTransform": {
+        "xBias": 0,
+        "yBias": 0,
+        "sizeScale": 1.0
+      },
+      "residualCorrection": {
+        "Switch": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LsRs": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_1": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RB_1": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LT_1": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_1": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LB_2": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "LT_2": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "RT_2": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        }
+      },
+      "_note": "16:9 reference resolution 1920x1080. All residuals are zero because base anchor ROIs are defined at this resolution. Ensures disambiguation from 21:9 1920x1080."
+    }
+  ]
+}
