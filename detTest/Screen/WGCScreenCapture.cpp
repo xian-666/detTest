@@ -2,6 +2,7 @@
 //#include "../../Component/Log/debugLog.h"
 #include "../common/DebugFileLog.h"
 #include "WGCScreenCapture.h"
+#include "DXGIScreenCapture.h"   // [Hybrid GPU pin-iGPU] reuse IsPinToIGPUEnvEnabled + DXGI headers
 #include <condition_variable>
 #include <iostream>
 #include <thread>
@@ -71,9 +72,44 @@ bool WGCScreenCapture::InitializeD3D11Device() {
     flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
+    // [Hybrid GPU pin-iGPU] When BT_CAPTURE_PIN_IGPU=1, explicitly bind the WGC D3D device to an
+    // iGPU/APU adapter. Without pin, pAdapter=nullptr lets the OS pick the "default" adapter
+    // (usually the iGPU in Optimus setups, but can shift during MUX/migration windows).
+    CComPtr<IDXGIAdapter1> pinIGPUAdapter;
+    if (DXGIScreenCapture::IsPinToIGPUEnvEnabled()) {
+        CComPtr<IDXGIFactory1> factory;
+        if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory1),
+                reinterpret_cast<void**>(&factory)))) {
+            for (UINT i = 0; ; ++i) {
+                CComPtr<IDXGIAdapter1> adapter;
+                HRESULT hrEnum = factory->EnumAdapters1(i, &adapter);
+                if (hrEnum == DXGI_ERROR_NOT_FOUND) break;
+                if (FAILED(hrEnum) || !adapter) continue;
+
+                DXGI_ADAPTER_DESC1 desc;
+                adapter->GetDesc1(&desc);
+                if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+
+                const SIZE_T vramMB = desc.DedicatedVideoMemory / (1024 * 1024);
+                const bool isIntelIGPU = (desc.VendorId == 0x8086);
+                const bool isAmdAPU    = (desc.VendorId == 0x1002 && vramMB <= 1024);
+                if (!isIntelIGPU && !isAmdAPU) continue;
+
+                pinIGPUAdapter = adapter;
+                char bufA[256] = { 0 };
+                WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1, bufA, sizeof(bufA), nullptr, nullptr);
+                DEBUG_LOG_FMT("[WGCScreenCapture] Pin-iGPU selected adapter=%s (BT_CAPTURE_PIN_IGPU=1)", bufA);
+                break;
+            }
+        }
+        if (!pinIGPUAdapter) {
+            DEBUG_LOG_FMT("[WGCScreenCapture] BT_CAPTURE_PIN_IGPU=1 but no iGPU/APU adapter located, using OS default");
+        }
+    }
+
     HRESULT hr = D3D11CreateDevice(
-        nullptr,
-        D3D_DRIVER_TYPE_HARDWARE,
+        pinIGPUAdapter,                                             // nullptr when pin disabled; explicit iGPU when enabled
+        pinIGPUAdapter ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE,
         nullptr,
         flags,
         featureLevels,

@@ -101,6 +101,12 @@ public:
     // [Hybrid GPU] Set dGPU-preferred mode (only affects InitializeForWindow when m_isHybridGPU==true)
     void SetHybridGPUMode(bool mode) { m_isHybridGPU = mode; }
 
+    // [Hybrid GPU pin-iGPU] Reads env var BT_CAPTURE_PIN_IGPU once per process ("1"/"true"/"yes").
+    // When true, DXGI/WGC init paths explicitly bind D3D devices to an iGPU/APU adapter, bypassing
+    // the monitor-driven adapter selection that can be misled during the GPU migration window.
+    // Result is cached; also used by WGCScreenCapture::InitializeD3D11Device.
+    static bool IsPinToIGPUEnvEnabled();
+
     void SetNewHandle(HWND &hWnd);
 
     int GetMonitorIndex(HMONITOR& hm);
@@ -175,6 +181,12 @@ private:
     // On success returns true and assigns m_d3dDevice/m_d3dContext/m_pDesktopAdapter/m_dxgiOutputDuplication
     // On failure returns false (existing resources untouched, caller falls through to the original logic)
     bool TryInitializeOnDiscreteGPU(HWND hWnd);
+
+    // [Hybrid GPU pin-iGPU] Reverse twin of TryInitializeOnDiscreteGPU: explicitly binds the D3D
+    // device + Desktop Duplication to an iGPU (Intel 0x8086) or APU (AMD 0x1002 with <=1GB VRAM).
+    // Only invoked when IsPinToIGPUEnvEnabled() returns true. On failure the caller falls through
+    // to the existing MonitorFromWindow-driven logic.
+    bool TryInitializeOnIntegratedGPU(HWND hWnd);
 
     // Intermediate resource for data processing
     CComPtr<ID3D11Texture2D> m_stagingTexture;

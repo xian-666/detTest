@@ -29,6 +29,27 @@ DXGIScreenCapture& DXGIScreenCapture::GetInstance()
     return capture;
 }
 
+// [Hybrid GPU pin-iGPU] Reads env var BT_CAPTURE_PIN_IGPU once per process and caches it.
+// Accepted truthy values (case-insensitive): "1", "true", "yes". Everything else = disabled.
+// When enabled, InitializeForWindow (and WGCScreenCapture::InitializeD3D11Device) will
+// preferentially bind the D3D device to an iGPU/APU adapter instead of letting the OS pick the
+// "default" adapter (which can shift to the dGPU during a MUX/migration window).
+bool DXGIScreenCapture::IsPinToIGPUEnvEnabled() {
+    static int s_cached = -1;  // -1 unknown, 0 off, 1 on
+    if (s_cached >= 0) return s_cached == 1;
+
+    char buf[16] = { 0 };
+    DWORD n = GetEnvironmentVariableA("BT_CAPTURE_PIN_IGPU", buf, (DWORD)sizeof(buf));
+    bool on = false;
+    if (n > 0 && n < sizeof(buf)) {
+        on = (lstrcmpiA(buf, "1") == 0 ||
+              lstrcmpiA(buf, "true") == 0 ||
+              lstrcmpiA(buf, "yes") == 0);
+    }
+    s_cached = on ? 1 : 0;
+    return on;
+}
+
 // [Hybrid GPU dGPU-first] Establish Desktop Duplication on the discrete GPU
 // Only called by InitializeForWindow when m_isHybridGPU==true.
 // Handles the case where a dGPU output has AttachedToDesktop==FALSE under fullscreen exclusive mode (DuplicateOutput directly, without skipping).
@@ -144,6 +165,135 @@ bool DXGIScreenCapture::TryInitializeOnDiscreteGPU(HWND hWnd) {
     return true;
 }
 
+// [Hybrid GPU pin-iGPU] Reverse twin of TryInitializeOnDiscreteGPU. Explicitly binds the D3D
+// device + Desktop Duplication to an integrated GPU / APU. Selection heuristic:
+//   - Intel vendor (0x8086) -> iGPU (UHD / Iris Xe / Arc iGPU family)
+//   - AMD vendor (0x1002) with DedicatedVideoMemory <= 1GB -> APU (Radeon integrated)
+//   - NVIDIA / high-VRAM AMD are skipped (those are the dGPU)
+// Preference order among candidates: adapter whose outputs own the target hMonitor wins; ties
+// fall back to lowest enumeration index. Failure is silent (caller falls through to the
+// existing monitor-driven path).
+// On success assigns m_d3dDevice / m_d3dContext / m_pDesktopAdapter / m_dxgiOutputDuplication /
+// m_dxgiOutputDescMonitor and returns true. On failure existing members are untouched.
+bool DXGIScreenCapture::TryInitializeOnIntegratedGPU(HWND hWnd) {
+    CComPtr<IDXGIFactory1> dxgiFactory;
+    HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1),
+        reinterpret_cast<void**>(&dxgiFactory));
+    if (FAILED(hr)) {
+        DEBUG_LOG_FMT("[DXGICapture] TryInitializeOnIntegratedGPU: Failed to create DXGI factory: 0x%08X", (unsigned)hr);
+        return false;
+    }
+
+    HMONITOR targetMon = hWnd ? MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) : nullptr;
+
+    CComPtr<IDXGIAdapter1> igpuAdapter;
+    std::string igpuName;
+    bool igpuOwnsTarget = false;
+
+    for (UINT adapterIndex = 0; ; ++adapterIndex) {
+        CComPtr<IDXGIAdapter1> adapter;
+        hr = dxgiFactory->EnumAdapters1(adapterIndex, &adapter);
+        if (hr == DXGI_ERROR_NOT_FOUND) break;
+        if (FAILED(hr) || !adapter) continue;
+
+        DXGI_ADAPTER_DESC1 desc;
+        adapter->GetDesc1(&desc);
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+
+        const SIZE_T vramMB = desc.DedicatedVideoMemory / (1024 * 1024);
+        const bool isIntelIGPU = (desc.VendorId == 0x8086);
+        const bool isAmdAPU    = (desc.VendorId == 0x1002 && vramMB <= 1024);
+        if (!isIntelIGPU && !isAmdAPU) continue;
+
+        char bufA[256] = { 0 };
+        WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1, bufA, sizeof(bufA), nullptr, nullptr);
+
+        // Prefer the adapter that owns the target window's monitor (mirrors reference behavior)
+        bool ownsTarget = false;
+        if (targetMon) {
+            for (UINT oi = 0; ; ++oi) {
+                CComPtr<IDXGIOutput> out;
+                if (FAILED(adapter->EnumOutputs(oi, &out))) break;
+                DXGI_OUTPUT_DESC od;
+                if (SUCCEEDED(out->GetDesc(&od)) && od.Monitor == targetMon) {
+                    ownsTarget = true;
+                    break;
+                }
+            }
+        }
+
+        if (!igpuAdapter || (ownsTarget && !igpuOwnsTarget)) {
+            igpuAdapter = adapter;
+            igpuName = bufA;
+            igpuOwnsTarget = ownsTarget;
+        }
+    }
+
+    if (!igpuAdapter) {
+        DEBUG_LOG_FMT("[DXGICapture] BT_CAPTURE_PIN_IGPU=1 but no iGPU/APU adapter found (Intel 0x8086 or AMD APU <=1GB)");
+        return false;
+    }
+
+    DEBUG_LOG_FMT("[DXGICapture] Pin-iGPU: selected adapter=%s ownsTargetMonitor=%d",
+        igpuName.c_str(), (int)igpuOwnsTarget);
+
+    D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_0 };
+    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#ifdef _DEBUG
+    flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+    CComPtr<ID3D11Device> tmpDevice;
+    CComPtr<ID3D11DeviceContext> tmpContext;
+    hr = D3D11CreateDevice(
+        igpuAdapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
+        featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+        &tmpDevice, nullptr, &tmpContext);
+    if (FAILED(hr)) {
+        DEBUG_LOG_FMT("[DXGICapture] iGPU D3D11CreateDevice failed: 0x%08X", (unsigned)hr);
+        return false;
+    }
+
+    std::vector<CComPtr<IDXGIOutputDuplication>> tmpDuplications;
+    std::vector<HMONITOR> tmpMonitors;
+    bool hasValidOutput = false;
+    for (UINT outputIndex = 0; outputIndex < 5; ++outputIndex) {
+        CComPtr<IDXGIOutput> dxgiOutput;
+        hr = igpuAdapter->EnumOutputs(outputIndex, &dxgiOutput);
+        if (FAILED(hr)) break;
+
+        DXGI_OUTPUT_DESC outputDesc;
+        dxgiOutput->GetDesc(&outputDesc);
+
+        CComPtr<IDXGIOutput1> output1;
+        hr = dxgiOutput->QueryInterface(__uuidof(IDXGIOutput1), reinterpret_cast<void**>(&output1));
+        if (FAILED(hr)) continue;
+
+        CComPtr<IDXGIOutputDuplication> duplication;
+        hr = output1->DuplicateOutput(tmpDevice, &duplication);
+        if (SUCCEEDED(hr) && duplication) {
+            tmpDuplications.push_back(duplication);
+            tmpMonitors.push_back(outputDesc.Monitor);
+            hasValidOutput = true;
+            DEBUG_LOG_FMT("[DXGICapture] iGPU output[%u] DuplicateOutput OK AttachedToDesktop=%d",
+                outputIndex, outputDesc.AttachedToDesktop ? 1 : 0);
+        } else {
+            DEBUG_LOG_FMT("[DXGICapture] iGPU output[%u] DuplicateOutput failed: 0x%08X", outputIndex, (unsigned)hr);
+        }
+    }
+
+    if (!hasValidOutput) {
+        DEBUG_LOG_FMT("[DXGICapture] iGPU adapter has no usable output, pin-iGPU aborted");
+        return false;
+    }
+
+    m_d3dDevice = tmpDevice;
+    m_d3dContext = tmpContext;
+    m_pDesktopAdapter = igpuAdapter;
+    m_dxgiOutputDuplication.assign(tmpDuplications.begin(), tmpDuplications.end());
+    m_dxgiOutputDescMonitor.assign(tmpMonitors.begin(), tmpMonitors.end());
+    return true;
+}
+
 bool DXGIScreenCapture::InitializeForWindow(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) {
         LogMessage("Invalid window handle");
@@ -152,6 +302,20 @@ bool DXGIScreenCapture::InitializeForWindow(HWND hWnd) {
 
     // Release existing resources so smart pointers are empty on reinitialization
     Release();
+
+    // [Hybrid GPU pin-iGPU] When BT_CAPTURE_PIN_IGPU=1, explicitly bind D3D device + desktop
+    // duplication to an iGPU/APU adapter, bypassing the MonitorFromWindow-driven selection.
+    // Failure here is soft: we fall through to the existing monitor-match path unchanged.
+    if (IsPinToIGPUEnvEnabled()) {
+        m_isWindowCapture = true;
+        m_targetWindow = hWnd;
+        if (TryInitializeOnIntegratedGPU(hWnd)) {
+            DEBUG_LOG_FMT("[DXGICapture] Pin-iGPU path activated (BT_CAPTURE_PIN_IGPU=1), bypassing default monitor match");
+            return true;
+        }
+        DEBUG_LOG_FMT("[DXGICapture] Pin-iGPU aborted, falling through to default monitor-match logic");
+        // Leave m_isWindowCapture / m_targetWindow set; the original path below reassigns them.
+    }
 
     // [Hybrid GPU rework] When m_isHybridGPU==true, skip the dGPU-first path and use the original monitor matching (reference implementation behavior)
     // Reason: under Optimus the dGPU has no outputs (EnumOutputs returns empty), so TryInitializeOnDiscreteGPU always fails.
