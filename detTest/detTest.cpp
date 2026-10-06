@@ -337,24 +337,44 @@ int main()
             }
             std::filesystem::path dest = exeDir / "config.ini";
             std::filesystem::path srcCfg;
-            // Walk upward from the exe dir (skipping the exe dir itself) to find the
-            // directory that contains the .vcxproj, then use its config.ini.
-            auto dir = exeDir.parent_path();
-            for (int i = 0; i < 6 && !dir.empty(); ++i, dir = dir.parent_path()) {
-                bool hasVcxproj = std::any_of(
-                    std::filesystem::directory_iterator(dir),
-                    std::filesystem::directory_iterator(),
-                    [](const std::filesystem::directory_entry& e) {
-                        return e.is_regular_file() && e.path().extension() == ".vcxproj";
-                    });
-                if (hasVcxproj) {
-                    auto candidate = dir / "config.ini";
-                    if (std::filesystem::exists(candidate)) {
-                        srcCfg = candidate;
+            // Locate the project directory that owns the .vcxproj, then use its
+            // config.ini as the authoritative source to sync into the run path.
+            //
+            // With the common VS layout OutDir = $(SolutionDir)x64\<config>\, the
+            // project folder (holding the .vcxproj + the source config.ini) is a
+            // SIBLING of the x64 folder, NOT an ancestor of the exe directory. A
+            // plain upward walk therefore never sees it and the run-path config.ini
+            // silently goes stale (source edits never propagate). To cover both
+            // layouts we check, at every ancestor of the exe dir, (a) the ancestor
+            // itself and (b) each of its immediate child directories, for one that
+            // contains BOTH a .vcxproj and a config.ini.
+            try {
+                auto hasVcxproj = [](const std::filesystem::path& d) {
+                    for (const auto& e : std::filesystem::directory_iterator(d)) {
+                        if (e.is_regular_file() && e.path().extension() == ".vcxproj") return true;
                     }
-                    break;
+                    return false;
+                };
+                auto isProjectDir = [&](const std::filesystem::path& d) {
+                    return hasVcxproj(d) && std::filesystem::exists(d / "config.ini");
+                };
+                auto dir = exeDir.parent_path();
+                for (int i = 0; i < 6 && !dir.empty(); ++i, dir = dir.parent_path()) {
+                    // (a) the ancestor itself is the project dir
+                    if (isProjectDir(dir)) { srcCfg = dir / "config.ini"; break; }
+                    // (b) an immediate child of the ancestor is the project dir
+                    bool found = false;
+                    for (const auto& sub : std::filesystem::directory_iterator(dir)) {
+                        if (!sub.is_directory()) continue;
+                        if (isProjectDir(sub.path())) { srcCfg = sub.path() / "config.ini"; found = true; break; }
+                    }
+                    if (found) break;
                 }
-            }
+            } catch (const std::exception&) {
+                // Filesystem walk failed (permissions, unusual layout, etc.).
+                // Leave srcCfg empty -> auto-sync is skipped and the run-path
+                // config.ini is used exactly as it is.
+            } catch (...) {}
             if (!srcCfg.empty()) {
                 bool needCopy = !std::filesystem::exists(dest);
                 if (needCopy) {
@@ -1062,16 +1082,16 @@ int main()
                                 s_captureFailCount = 0;  // 重置：Paused 导致的失败不是真实采集失败，避免退避 sleep
                             }
 
-                            // 显示采集重试画面
+                            // 采不到当前帧:冻结显示上一帧有效画面(不再叠黄字警告;
+                            // 采集失败/黑屏等状态改由 [STATUS] 心跳与日志反映)。
                             if (s_hasLastInference && !s_lastMosaic.empty()) {
                                 displayImg = s_lastMosaic.clone();
                             } else {
+                                // 尚无任何有效历史帧(刚启动/首帧即失败):显示中性占位(白字,非黄字)
                                 displayImg = cv::Mat::zeros(480, 640, CV_8UC3);
                                 cv::putText(displayImg, "WAITING FOR GAME...", cv::Point(120, 240),
                                     cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 1);
                             }
-                            cv::putText(displayImg, "CAPTURE RETRY...", cv::Point(150, 300),
-                                cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 255), 2);
 
                             // 采集持续失败超过阈值时，不再调用 ForceReinitialize。
                             // ForceReinitialize 会重置 DowngradeMethod 的内部状态（Release+Initialize），
@@ -1096,8 +1116,9 @@ int main()
                             }
                             std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
 
-                            s_hasLastInference = false;
-                            s_lastMosaic.release();
+                            // 【冻结上一帧】此处刻意不再释放 s_lastMosaic:采不到当前帧时保留上一帧有效画面,
+                            // 使预览在连续失败期间稳定冻结,而非回落占位画面。下次推理成功会自然覆盖它;
+                            // 游戏进程退出/失焦由更上游的 no-game / not-foreground 门控分支单独处理。
 
                             if (s_captureFailCount % 30 == 1) {
                                 DEBUG_LOG_FMT("[MAIN] Capture failed, skipping inference (fails: %d)", s_captureFailCount);
@@ -1438,6 +1459,36 @@ RENDER_FRAME:
                     fs.width = frameForMetrics.cols;
                     fs.height = frameForMetrics.rows;
                     m.OnFrame(fs, frameForMetrics);
+                }
+
+                // [STATUS] heartbeat: one line/second written to the file log so that
+                // capture health is observable even with the preview window disabled
+                // ([Log] show=false). Counters are deltas over the last second plus
+                // running totals, all sourced from CaptureMetrics (no new capture work).
+                if (CaptureMetrics::GetInstance().IsEnabled()) {
+                    static std::chrono::steady_clock::time_point s_lastStatusTime{};
+                    static std::uint64_t s_prevOk = 0, s_prevBlack = 0, s_prevFail = 0, s_prevDup = 0;
+                    auto statusNow = std::chrono::steady_clock::now();
+                    if (std::chrono::duration_cast<std::chrono::milliseconds>(statusNow - s_lastStatusTime).count() >= 1000) {
+                        s_lastStatusTime = statusNow;
+                        auto snap = CaptureMetrics::GetInstance().GetSnapshot();
+                        unsigned long long dOk    = static_cast<unsigned long long>(snap.framesOk        - s_prevOk);
+                        unsigned long long dBlack = static_cast<unsigned long long>(snap.framesBlack     - s_prevBlack);
+                        unsigned long long dFail  = static_cast<unsigned long long>(snap.framesFailed    - s_prevFail);
+                        unsigned long long dDup   = static_cast<unsigned long long>(snap.framesDuplicate - s_prevDup);
+                        s_prevOk = snap.framesOk; s_prevBlack = snap.framesBlack;
+                        s_prevFail = snap.framesFailed; s_prevDup = snap.framesDuplicate;
+                        DEBUG_LOG_FMT("[STATUS] method=%s state=%s fg=%d fps=%.1f win[ok=%llu black=%llu fail=%llu dup=%llu] tot[ok=%llu black=%llu fail=%llu] reinit(f/s)=%llu/%llu focusLost=%llu",
+                            CaptureMetrics::MethodName(snap.method), CaptureMetrics::StateName(snap.state),
+                            (int)isGameForeground, CaptureMetrics::GetInstance().RecentFps(),
+                            dOk, dBlack, dFail, dDup,
+                            static_cast<unsigned long long>(snap.framesOk),
+                            static_cast<unsigned long long>(snap.framesBlack),
+                            static_cast<unsigned long long>(snap.framesFailed),
+                            static_cast<unsigned long long>(snap.forceReinitCount),
+                            static_cast<unsigned long long>(snap.softReinitCount),
+                            static_cast<unsigned long long>(snap.focusLostCount));
+                    }
                 }
 
                 // 通用模式：Release 和 Debug 都显示 OpenCV 窗口
