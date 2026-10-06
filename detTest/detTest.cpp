@@ -269,11 +269,28 @@ LONG WINAPI WGCVectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo) {
 // Global unhandled exception filter - last resort before process termination
 LONG WINAPI GlobalExceptionFilter(PEXCEPTION_POINTERS pExceptionInfo) {
     DWORD code = pExceptionInfo->ExceptionRecord->ExceptionCode;
-    DEBUG_LOG_FMT("[GLOBAL EXCEPTION FILTER] Caught unhandled exception: 0x%X", code);
-    
+    void* addr = pExceptionInfo->ExceptionRecord->ExceptionAddress;
+    int stage = g_crashStage.load();
+
+    // [Run identity] Log first, then flush to disk, so a subsequent hang/abort inside the
+    // Release path cannot erase the breadcrumb. 0xE06D7363 == MSVC C++ throw (this is what
+    // an UNCAUGHT winrt::hresult_error would look like here; caught ones never reach us).
+    DEBUG_LOG_FMT("[GLOBAL EXCEPTION FILTER] unhandled code=0x%08X addr=%p stage=%d",
+        code, addr, stage);
+
+    // Write breadcrumb even if [Log] text is off -- this file is post-mortem evidence.
+    char reason[128];
+    _snprintf_s(reason, sizeof(reason), _TRUNCATE,
+        "unhandled code=0x%08X addr=%p stage=%d", code, addr, stage);
+    WriteAbortBreadcrumb(reason);
+
     // Force release resources to prevent GPU state corruption
-    UnifiedScreenCapture::GetInstance().Release();
-    
+    try {
+        UnifiedScreenCapture::GetInstance().Release();
+    } catch (...) {
+        // Never let cleanup mask the original crash site.
+    }
+
     // Return EXCEPTION_CONTINUE_SEARCH to allow normal crash dump generation
     return EXCEPTION_CONTINUE_SEARCH;
 }

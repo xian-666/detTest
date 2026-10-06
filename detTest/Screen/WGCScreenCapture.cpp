@@ -928,7 +928,15 @@ bool WGCScreenCapture::ToCVMat(ID3D11Texture2D* inputTexture, cv::Mat& outputMat
     D3D11_MAPPED_SUBRESOURCE mappedResource;
     HRESULT hr = m_d3dContext->Map(inputTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
     if (FAILED(hr)) {
-        LogMessage("Map resource failed");
+        // [Diag] Include HRESULT + texture geometry + device state. A recurring DXGI_ERROR_*
+        // here on the staging texture is the fingerprint of game-side capture blocking
+        // (WDA_EXCLUDEFROMCAPTURE / exclusive-fullscreen device churn) rather than a random
+        // WGC hiccup, and is impossible to distinguish from a "Map resource failed" alone.
+        HRESULT removed = S_OK;
+        if (m_d3dDevice) removed = m_d3dDevice->GetDeviceRemovedReason();
+        DEBUG_LOG_FMT("[WGCScreenCapture] Map failed hr=0x%08X deviceRemoved=0x%08X tex=%ux%u fmt=%d usage=%d",
+            (unsigned)hr, (unsigned)removed, texDesc.Width, texDesc.Height,
+            (int)texDesc.Format, (int)texDesc.Usage);
         return false;
     }
 

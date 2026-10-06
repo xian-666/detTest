@@ -479,39 +479,27 @@ bool UnifiedScreenCapture::Initialize(HWND hWnd, bool captureClientAreaOnly) {
     DEBUG_LOG_FMT("[UnifiedCapture] m_isHybridGPU=%d (mux=%d amdHybrid=%d)",
         (int)m_isHybridGPU, (int)env.isHybridWithMux, (int)env.isAmdApuHybrid);
 
-    // [Display output detection + risk-aware routing] Two signals decide the path, most-conservative wins:
-    //   (1) Which GPU drives the monitor containing the window (DetectDisplayGPUType)
-    //   (2) Whether any environment risk is present (NeedsEnhancedCompat: Arc iGPU, early Arc driver,
-    //       MUX hot-switch, AMD APU cross-adapter, HDR, VRR+HiDPI)
-    // Routing table:
-    //   dGPU output                            -> InitializeEnhanced
-    //   iGPU output + no risk                  -> InitializeLegacy  (reference behavior preserved)
-    //   iGPU output + risk                     -> InitializeEnhanced (Legacy vetoed by risk)
-    //   Detect failed (-1)                     -> decide by NeedsEnhancedCompat only (original fallback)
+    // [Display output detection] Route by which GPU drives the monitor containing the window:
+    //   iGPU output (e.g. Optimus mode) -> InitializeLegacy (EnhancedRT not activated, reference-solution behavior)
+    //   dGPU output (e.g. MUX direct mode) -> InitializeEnhanced (activate EnhancedRT + dGPU priority)
+    //   Detection failure -> fall back to the original NeedsEnhancedCompat routing logic (byte-for-byte unchanged)
+    //
+    // Note: an earlier revision added a "risk-aware upgrade" here that promoted iGPU-output
+    // runs to Enhanced whenever NeedsEnhancedCompat returned 1 (e.g. MUX / HDR / VRR+HiDPI).
+    // Field testing showed this is a REGRESSION for titles like NGR-Win64-Shipping running
+    // borderless on the iGPU: their DXGI desktop duplication (Legacy) is stable, while the
+    // Enhanced path's WGC fallback hits a DXGI_ERROR_DEVICE_REMOVED flap loop on Intel UHD
+    // drivers with mux=1/vrr=1. Reverted to output-only routing to match the reference project.
     {
         int gpuType = DetectDisplayGPUType(hWnd);
-        // [Routing robustness upgrade] Output-based selection is a *necessary* condition but not a
-        // *sufficient* one. In addition to which GPU drives the monitor, we still consult
-        // NeedsEnhancedCompat (Arc iGPU / early Arc driver / MUX hot-switch / AMD APU cross-adapter /
-        // HDR / VRR+HiDPI). Semantics: "any risk signal vetoes Legacy" -> Enhanced wins.
-        //
-        //   gpuType==0 (iGPU output) + no risk  -> Legacy   (reference behavior preserved)
-        //   gpuType==0 (iGPU output) + has risk -> Enhanced (was Legacy; now upgraded)
-        //   gpuType==1 (dGPU output)            -> Enhanced (unchanged)
-        //   gpuType==-1 (detect failed)         -> fall through to risk-only path below
-        if (gpuType == 0 || gpuType == 1) {
-            bool risky = compat::GpuEnvironmentProbe::NeedsEnhancedCompat(env);
-            if (gpuType == 1) {
-                DEBUG_LOG_FMT("[UnifiedCapture] display on dGPU -> InitializeEnhanced (risky=%d)", (int)risky);
-                return InitializeEnhanced(hWnd, captureClientAreaOnly);
-            }
-            // gpuType == 0
-            if (risky) {
-                DEBUG_LOG_FMT("[UnifiedCapture] display on iGPU but NeedsEnhancedCompat=1 (Arc/HDR/MUX/etc) -> InitializeEnhanced (upgraded from Legacy)");
-                return InitializeEnhanced(hWnd, captureClientAreaOnly);
-            }
-            DEBUG_LOG_FMT("[UnifiedCapture] display on iGPU, no risk -> InitializeLegacy");
+        if (gpuType == 0) {
+            // Monitor driven by iGPU -> Legacy (reference-solution behavior)
+            DEBUG_LOG_FMT("[UnifiedCapture] display on iGPU -> InitializeLegacy");
             return InitializeLegacy(hWnd, captureClientAreaOnly);
+        } else if (gpuType == 1) {
+            // Monitor driven by dGPU -> Enhanced (dGPU direct, EnhancedRT enhancements effective)
+            DEBUG_LOG_FMT("[UnifiedCapture] display on dGPU -> InitializeEnhanced");
+            return InitializeEnhanced(hWnd, captureClientAreaOnly);
         }
         // gpuType == -1: detection failed, fall back to original logic
         DEBUG_LOG_FMT("[UnifiedCapture] DetectDisplayGPUType failed, fallback to NeedsEnhancedCompat");
