@@ -766,11 +766,18 @@ int main()
                 }
                 static constexpr int kGameHwndStableFrames = 15;
                 if (s_hwndStableFrameCount < kGameHwndStableFrames) {
-                    displayImg = cv::Mat::zeros(480, 640, CV_8UC3);
-                    cv::putText(displayImg, "Connecting to game...", cv::Point(160, 230),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 1);
-                    cv::putText(displayImg, g_targetLabel, cv::Point(250, 260),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 1);
+                    // 游戏未启动/尚未出图:显示 "Connecting to game..."。
+                    // 但若此前已采到过有效帧(切出游戏会把稳定计数清零,导致在此关反复抖动),
+                    // 则冻结上一帧有效画面,而非反复弹 "Connecting to game..."。
+                    if (s_hasLastInference && !s_lastMosaic.empty()) {
+                        displayImg = s_lastMosaic.clone();
+                    } else {
+                        displayImg = cv::Mat::zeros(480, 640, CV_8UC3);
+                        cv::putText(displayImg, "Connecting to game...", cv::Point(160, 230),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 1);
+                        cv::putText(displayImg, g_targetLabel, cv::Point(250, 260),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 1);
+                    }
                     logStartupGate("unstable-hwnd");
                     goto RENDER_FRAME;
                 }
@@ -800,7 +807,8 @@ int main()
                     
                     if (wasRealtime) {
                         wasRealtime = false;
-                        s_hasLastInference = false;
+                        // 【冻结上一帧】失焦不再清 s_hasLastInference：保留上一帧有效画面用于冻结显示。
+                        // 游戏真正退出由 !gameExists 分支清理并回落 "Waiting for game..."。
                         // 【混合显卡优化】失焦时采用软暂停，不释放 DXGI/WGC 资源
                         // 原因：在混合显卡笔记本上，Release() 后焦点恢复时 Initialize() 会在
                         // GPU 迁移窗口期内调用，极易选错 adapter、拿到 stale buffer。
@@ -810,11 +818,16 @@ int main()
                         capture.PauseCapture();
                     }
 
-                    displayImg = cv::Mat::zeros(480, 640, CV_8UC3);
-                    cv::putText(displayImg, "Waiting for game focus...", cv::Point(140, 230),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 1);
-                    cv::putText(displayImg, g_targetLabel, cv::Point(250, 260),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 1);
+                    // 已开始采图后中途切出：冻结显示上一次采到的有效帧；从未采到过才显示占位提示
+                    if (s_hasLastInference && !s_lastMosaic.empty()) {
+                        displayImg = s_lastMosaic.clone();
+                    } else {
+                        displayImg = cv::Mat::zeros(480, 640, CV_8UC3);
+                        cv::putText(displayImg, "Waiting for game focus...", cv::Point(140, 230),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 1);
+                        cv::putText(displayImg, g_targetLabel, cv::Point(250, 260),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 1);
+                    }
                     logStartupGate("not-foreground");
                     goto RENDER_FRAME;
                 }
