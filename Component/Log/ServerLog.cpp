@@ -4,6 +4,8 @@
 #include <string>
 #include <chrono>
 #include <ctime>
+#include <windows.h>   // [Run identity] GetCurrentProcessId for per-run .bin isolation
+#include <sstream>
 using namespace std;
 
 std::string ServerLog::GetTimeStamp(int formatType)
@@ -100,8 +102,17 @@ void ServerLog::ReOpen_New()
             if (!BaseUtility::CheckDirectoryExist(strLogDirectory)) {
                 BaseUtility::CreateDirectory_(strLogDirectory);
             }
-            std::string fullFilePath = strCurrentPath + m_filePath + m_fileName + GetTimeStamp(TIMESTAMP_FORMAT_LOGNAME) + m_fileSuffix;
-            m_file.open(fullFilePath, std::ios::app|std::ios::binary);
+            // [Run identity] Timestamp alone has second resolution; two launches in the same
+            // second (or a crash-retry loop) would collide and append into the same .bin.
+            // Appending PID guarantees per-process isolation for the upload log too.
+            std::ostringstream pidTag;
+            pidTag << "_pid" << static_cast<unsigned long>(GetCurrentProcessId());
+            std::string fullFilePath = strCurrentPath + m_filePath + m_fileName
+                + GetTimeStamp(TIMESTAMP_FORMAT_LOGNAME)
+                + pidTag.str()
+                + m_fileSuffix;
+            // [Isolation] trunc: never inherit a crashed predecessor's stale tail.
+            m_file.open(fullFilePath, std::ios::out | std::ios::trunc | std::ios::binary);
         }
         catch (std::exception& e) {
             try { m_file.close(); }

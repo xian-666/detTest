@@ -10,6 +10,7 @@
 
 #include "CaptureMetrics.h"
 
+#include <windows.h>   // [Run identity] GetCurrentProcessId for per-run CSV isolation
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -67,9 +68,14 @@ bool CaptureMetrics::Init(const Config& cfg, const std::string& outputDir) {
             auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
             std::tm localTm{};
             localtime_s(&localTm, &now);
+            // [Run identity] Timestamp has only second resolution; append PID so that two
+            // launches within the same second (or concurrent dual-instance runs) never collide
+            // on the same CSV file. Combined with ios::trunc below, every run owns a pristine
+            // file: detTest_metrics_20261006_142345_pid12345.csv
             std::ostringstream name;
             name << "detTest_metrics_"
-                 << std::put_time(&localTm, "%Y%m%d_%H%M%S") << ".csv";
+                 << std::put_time(&localTm, "%Y%m%d_%H%M%S")
+                 << "_pid" << static_cast<unsigned long>(GetCurrentProcessId()) << ".csv";
             fs::path full = dir / name.str();
 
             m_csv = std::make_unique<std::ofstream>(full, std::ios::out | std::ios::trunc);

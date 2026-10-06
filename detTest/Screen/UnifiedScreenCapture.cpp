@@ -1,5 +1,6 @@
 #include "UnifiedScreenCapture.h"
 #include "../common/DebugFileLog.h"
+#include "../common/TargetWindow.h"   // [Run identity] DescribeWindow + ActiveSpec for [RUN TARGET] log
 #include <VersionHelpers.h>
 #include <thread>
 #include <chrono>
@@ -542,6 +543,11 @@ bool UnifiedScreenCapture::InitializeLegacy(HWND hWnd, bool captureClientAreaOnl
     DEBUG_LOG_FMT("[UnifiedCapture] Initialize: hwnd=%p title=%ls clientOnly=%d",
         (void*)hWnd, title, (int)captureClientAreaOnly);
 
+    // [Run identity] Cross-check the actual captured window against the configured [Target] spec
+    // so a log opened days later still answers "which game did this run point at?".
+    DEBUG_LOG_FMT("[RUN TARGET] hit: %ls", target::DescribeWindow(hWnd).c_str());
+    DEBUG_LOG_FMT("[RUN TARGET] spec: %ls", target::ActiveSpec().Describe().c_str());
+
     // Log Windows build number for WGC support diagnosis.
     {
         HMODULE hMod = ::GetModuleHandleW(L"ntdll.dll");
@@ -632,6 +638,10 @@ bool UnifiedScreenCapture::InitializeEnhanced(HWND hWnd, bool captureClientAreaO
     GetWindowTextW(hWnd, title, 256);
     DEBUG_LOG_FMT("[UnifiedCapture][Enhanced] Initialize: hwnd=%p title=%ls clientOnly=%d",
         (void*)hWnd, title, (int)captureClientAreaOnly);
+
+    // [Run identity] Same cross-check as the Legacy path (see InitializeLegacy).
+    DEBUG_LOG_FMT("[RUN TARGET] hit: %ls", target::DescribeWindow(hWnd).c_str());
+    DEBUG_LOG_FMT("[RUN TARGET] spec: %ls", target::ActiveSpec().Describe().c_str());
 
     // Log Windows build number for WGC support diagnosis.
     {

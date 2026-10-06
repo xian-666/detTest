@@ -108,10 +108,45 @@ static void WriteAbortBreadcrumb(const char* reason) {
             }
             dir = tmp;
         }
-        std::ofstream ofs(dir + "abort_breadcrumb.txt", std::ios::app);
-        ofs << "reason=" << (reason ? reason : "null")
-            << " stage=" << g_crashStage.load() << "\n";
-        ofs.flush();
+
+        // [Run identity] Compose a per-launch unique name so a fresh crash never mixes into
+        // an old crash's tail, while STILL keeping an aggregate file for cross-run scanning
+        // ("has this build crashed at stage X before?"). Both files carry the same line
+        // content; only the isolation guarantee differs.
+        //   Per-run : abort_breadcrumb_YYYYMMDD_HHMMSS_pid<N>.txt   (trunc, pristine)
+        //   Aggregate: abort_breadcrumb.txt                          (app, one line per crash)
+        SYSTEMTIME st{};
+        GetLocalTime(&st);
+        char timeBuf[24];
+        _snprintf_s(timeBuf, sizeof(timeBuf), _TRUNCATE,
+            "%04d%02d%02d_%02d%02d%02d",
+            st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+        char pidBuf[16];
+        _snprintf_s(pidBuf, sizeof(pidBuf), _TRUNCATE,
+            "pid%lu", static_cast<unsigned long>(GetCurrentProcessId()));
+
+        const int stage = g_crashStage.load();
+        const char* r = (reason && *reason) ? reason : "null";
+
+        // Per-run file: gives an operator a single artifact that maps 1:1 to this launch.
+        {
+            std::string perRunPath = dir + "abort_breadcrumb_" + timeBuf + "_" + pidBuf + ".txt";
+            std::ofstream ofs(perRunPath, std::ios::out | std::ios::trunc);
+            ofs << "reason=" << r
+                << " stage=" << stage
+                << " time=" << timeBuf
+                << " " << pidBuf << "\n";
+            ofs.flush();
+        }
+
+        // Aggregate file: preserved for cross-run "have we seen this stage crash before?".
+        {
+            std::ofstream ofs(dir + "abort_breadcrumb.txt", std::ios::app);
+            ofs << "[" << timeBuf << "][" << pidBuf << "] "
+                << "reason=" << r
+                << " stage=" << stage << "\n";
+            ofs.flush();
+        }
     }
     catch (...) {}
 }
@@ -376,6 +411,63 @@ int main()
         mcfg.csvDir = cfgLoaded ? strconv::ToUtf8(g_ini.GetString(L"Metrics", L"csv_dir", L"metrics"))
                                 : std::string("metrics");
         CaptureMetrics::GetInstance().Init(mcfg, GetExeDir());
+    }
+
+    // [Run identity] Before DEBUG_LOG_INIT() creates the file, hand the logger a tag (used
+    // in the filename) and a banner (written into the file header). Reading these values here
+    // instead of inside DebugFileLogger keeps the logger generic (no dep on target / env semantics).
+    {
+        std::string tag;
+        const auto& spec = target::ActiveSpec();
+        if (!spec.process.empty()) {
+            tag = strconv::ToUtf8(spec.process);
+        } else if (!spec.title.empty()) {
+            std::string t = strconv::ToUtf8(spec.title);
+            if (t.size() > 16) t.resize(16);   // UTF-8 CJK titles can be long; keep it short
+            tag = t;
+        } else {
+            tag = "default";
+        }
+
+        // BT_CAPTURE_COMPAT_MODE (see GpuEnvironmentProbe.h): auto / force_legacy / force_enhanced
+        char cmBuf[64] = { 0 };
+        DWORD cmLen = GetEnvironmentVariableA("BT_CAPTURE_COMPAT_MODE", cmBuf, (DWORD)sizeof(cmBuf));
+        std::string compat = (cmLen > 0 && cmLen < sizeof(cmBuf)) ? std::string(cmBuf) : "auto";
+
+        // BT_CAPTURE_PIN_IGPU (see DXGIScreenCapture::IsPinToIGPUEnvEnabled)
+        char pgBuf[16] = { 0 };
+        DWORD pgLen = GetEnvironmentVariableA("BT_CAPTURE_PIN_IGPU", pgBuf, (DWORD)sizeof(pgBuf));
+        bool pin = (pgLen > 0 && pgLen < sizeof(pgBuf) &&
+            (lstrcmpiA(pgBuf, "1") == 0 || lstrcmpiA(pgBuf, "true") == 0 || lstrcmpiA(pgBuf, "yes") == 0));
+
+        // Windows build (same retrieval path as InitializeLegacy/Enhanced)
+        std::string winBuild = "unknown";
+        {
+            HMODULE hMod = ::GetModuleHandleW(L"ntdll.dll");
+            if (hMod) {
+                typedef LONG(WINAPI* RtlGetVerPtr)(PRTL_OSVERSIONINFOW);
+                auto fxPtr = (RtlGetVerPtr)::GetProcAddress(hMod, "RtlGetVersion");
+                if (fxPtr) {
+                    RTL_OSVERSIONINFOW rovi = { 0 };
+                    rovi.dwOSVersionInfoSize = sizeof(rovi);
+                    if (fxPtr(&rovi) == 0) {
+                        char wb[64];
+                        _snprintf_s(wb, sizeof(wb), _TRUNCATE, "%d.%d build %d",
+                            rovi.dwMajorVersion, rovi.dwMinorVersion, rovi.dwBuildNumber);
+                        winBuild = wb;
+                    }
+                }
+            }
+        }
+
+        std::vector<std::string> banner = {
+            "Target Spec  : " + g_targetLabel,
+            "Compat Mode  : " + compat + "   (env BT_CAPTURE_COMPAT_MODE)",
+            "Pin-iGPU     : " + std::string(pin ? "ON" : "OFF") + "   (env BT_CAPTURE_PIN_IGPU)",
+            "Windows      : " + winBuild,
+            "Working Dir  : " + GetExeDir(),
+        };
+        DEBUG_LOG_SET_RUN_CONTEXT(tag, banner);
     }
 
     DEBUG_LOG_INIT();
