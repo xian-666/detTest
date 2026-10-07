@@ -704,6 +704,28 @@ int main()
                 static std::chrono::steady_clock::time_point s_lostFocusTime{};
                 static bool s_hasLostFocusRecord = false;
 
+                // [Hybrid cold-start] Cached once: is this a hybrid (Optimus/mux or AMD APU) GPU machine?
+                // Mirrors UnifiedScreenCapture::Initialize's m_isHybridGPU derivation (mux || amdApuHybrid),
+                // but is available BEFORE the first Initialize, which the grace gate below needs.
+                static const bool s_appIsHybridGPU = []() {
+                    auto env = compat::GpuEnvironmentProbe::Detect();
+                    return env.isHybridWithMux || env.isAmdApuHybrid;
+                }();
+
+                // [Hybrid cold-start grace] On a hybrid laptop the DXGI desktop duplication is created on the
+                // Intel UHD iGPU. Attaching inside the game's startup window (GPU migration / present-establish)
+                // makes that duplication come up black/stale, and because black frames are never counted as source
+                // errors the session never re-probes the now-settled output -> the show parks on a black/[PAUSED]
+                // frame. Only bites when the AI is started BEFORE the game; a dGPU desktop has no migration window
+                // and a game-first attach lands after it settles. So for the FIRST attach on a hybrid GPU, hold off
+                // initializing until the foreground target has been stable for kHybridColdStartGraceMs, letting an
+                // AI-first run wait out the fragile window exactly like a game-first attach would.
+                static bool s_hybridGraceConsumed = false;
+                static bool s_hybridGraceTiming = false;
+                static HWND s_hybridGraceWnd = nullptr;
+                static std::chrono::steady_clock::time_point s_hybridGraceStart{};
+                static constexpr int kHybridColdStartGraceMs = 10000;
+
                 // 【推理异步启动期状态】
                 // 问题：游戏启动时第一帧调用 tryGetAsyncClassificationResult 返回 false（推理未完成），
                 //       主循环错误地认为 "推理失败"，递增 s_inferenceFailures 并进入恢复阶段。
@@ -741,6 +763,10 @@ int main()
                     s_hwndStabilityRef = nullptr;
                     s_hwndStableFrameCount = 0;
                     capture.SetForegroundStable(false);
+                    // [Hybrid cold-start] A fresh launch must re-earn the grace window.
+                    s_hybridGraceConsumed = false;
+                    s_hybridGraceTiming = false;
+                    s_hybridGraceWnd = nullptr;
 
                     if (wasRealtime) {
                         wasRealtime = false;
@@ -833,6 +859,35 @@ int main()
                 }
 
                 capture.SetForegroundStable(true);
+
+                // [Hybrid cold-start grace] Delay ONLY the first attach on a hybrid GPU until the
+                // foreground target has held for kHybridColdStartGraceMs (re-timed if the HWND changes,
+                // e.g. launcher/splash -> real client). Capture is skipped entirely while waiting.
+                if (!s_hybridGraceConsumed && s_appIsHybridGPU) {
+                    if (!s_hybridGraceTiming || s_hybridGraceWnd != gameWnd) {
+                        s_hybridGraceTiming = true;
+                        s_hybridGraceWnd = gameWnd;
+                        s_hybridGraceStart = std::chrono::steady_clock::now();
+                    }
+                    auto waitedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - s_hybridGraceStart).count();
+                    if (waitedMs < kHybridColdStartGraceMs) {
+                        if (s_hasLastInference && !s_lastMosaic.empty()) {
+                            displayImg = s_lastMosaic.clone();
+                        } else {
+                            displayImg = cv::Mat::zeros(480, 640, CV_8UC3);
+                            cv::putText(displayImg, "Hybrid cold-start grace...", cv::Point(120, 230),
+                                cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 1);
+                            cv::putText(displayImg, g_targetLabel, cv::Point(250, 260),
+                                cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 1);
+                        }
+                        logStartupGate("hybrid-coldstart-grace");
+                        goto RENDER_FRAME;
+                    }
+                    s_hybridGraceConsumed = true;
+                    DEBUG_LOG_FMT("[MAIN] Hybrid cold-start grace elapsed (%lldms) -> proceeding with first attach",
+                        (long long)waitedMs);
+                }
 
                 // Force reinitialize if window handle changed
                 if (gameWnd != s_lastGameWnd) {
@@ -983,6 +1038,15 @@ int main()
                         // 防止画面亮度在临界值附近抖动时频繁切换状态
                         static int s_blackScreenExitStableCount = 0;
                         static constexpr int BLACK_SCREEN_EXIT_STABLE_FRAMES = 5;
+                        // [Hybrid cold-attach reprobe] bounded safety net for a wedged iGPU duplication that
+                        // arrives as an endless black screen after attach. A genuine long loading screen is
+                        // handled by the existing pause/exit logic; this only re-detects the output a couple of
+                        // times per black episode (hybrid GPU only), harmless if the black was real loading.
+                        static std::chrono::steady_clock::time_point s_blackStreakStart{};
+                        static bool s_blackStreakTiming = false;
+                        static int s_hybridBlackReprobeCount = 0;
+                        static constexpr int kHybridBlackReprobeMs = 30000;
+                        static constexpr int kHybridBlackReprobeMax = 2;
                         
                         if (captureOk && !preCheckFrame.empty()) {
                             // 计算画面平均亮度
@@ -1010,7 +1074,28 @@ int main()
                                 }
                                 
                                 capture.PauseCapture();
-                                
+
+                                // [Hybrid cold-attach reprobe] If a hybrid-GPU black streak runs abnormally
+                                // long, the iGPU duplication likely came up wedged/stale; re-detect the settled
+                                // output a bounded number of times. Reset the streak anchor after each reprobe so
+                                // the next interval is measured from here.
+                                if (s_appIsHybridGPU) {
+                                    if (!s_blackStreakTiming) {
+                                        s_blackStreakStart = std::chrono::steady_clock::now();
+                                        s_blackStreakTiming = true;
+                                    }
+                                    auto blackMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - s_blackStreakStart).count();
+                                    if (blackMs > kHybridBlackReprobeMs && s_hybridBlackReprobeCount < kHybridBlackReprobeMax) {
+                                        s_hybridBlackReprobeCount++;
+                                        s_blackStreakStart = std::chrono::steady_clock::now();
+                                        DEBUG_LOG_FMT("[MAIN] Hybrid black streak %lldms after attach -> bounded reprobe %d/%d (forceReinitialize)",
+                                            (long long)blackMs, s_hybridBlackReprobeCount, kHybridBlackReprobeMax);
+                                        forceReinit(gameWnd);
+                                        capture.PauseCapture();
+                                    }
+                                }
+
                                 // 【游戏启动优化】黑屏暂停时周期性 Resume 一次来维持 DXGI 管道活性。
                                 // DXGI Desktop Duplication 的 AcquireNextFrame 长时间不调用后，
                                 // 内部帧缓冲可能超时/stale，导致 Resume 后首帧采集失败。
@@ -1056,6 +1141,9 @@ int main()
                                     }
                                     s_blackScreenCount = 0;
                                     s_blackScreenExitStableCount = 0;
+                                    // black episode resolved -> give the next episode a fresh reprobe budget
+                                    s_blackStreakTiming = false;
+                                    s_hybridBlackReprobeCount = 0;
                                 }
                             } else {
                                 s_blackScreenExitStableCount = 0;
