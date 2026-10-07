@@ -309,4 +309,17 @@ private:
     static constexpr int BLACK_STREAK_REBUILD_LIMIT = 5;   // circuit breaker: stop rebuilding after N attempts
     static constexpr int BLACK_STREAK_GOOD_RESET = 600;    // sustained recovery (~20s+) re-arms the breaker
 
+    // [SelfHeal-hybrid-reroute] WGC is the wrong backend for exclusive-fullscreen / CG mode
+    // flips: it captures via DWM composition, which the flip bypasses, so a stranded WGC
+    // session emits black frames that are intentionally not counted as source errors -> the
+    // rebuild ladder exhausts and the session parks permanently in a black WGC (observed as a
+    // "freeze" during ZZZ CG). There is no upward exit at runtime (SwitchToMethod(DXGI) is
+    // never called; only a full Initialize re-route retries DXGI, and the main loop drives that
+    // on focus/handle change - never during a foreground CG). So when the WGC rebuild budget is
+    // exhausted on a hybrid GPU, escalate one rung: re-route through ForceReinitialize to retry
+    // DXGI (priority 1). Cooldown bounds how often we attempt the climb back.
+    // Hybrid-only: m_isHybridGPU==false never touches this path (non-hybrid behavior unchanged).
+    std::chrono::steady_clock::time_point m_lastWgcDxgiRerouteTime{};
+    static constexpr int WGC_REROUTE_COOLDOWN_MS = 5000;   // min interval between WGC->DXGI re-route attempts
+
 };

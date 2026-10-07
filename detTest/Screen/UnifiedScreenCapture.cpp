@@ -1224,8 +1224,40 @@ void UnifiedScreenCapture::NoteBadFrameAndMaybeRebuildWGC() {
         return;
     }
 
-    // Guardrail 2: circuit breaker tripped - log only.
+    // Guardrail 2: circuit breaker tripped.
     if (m_blackStreakRebuildCount >= BLACK_STREAK_REBUILD_LIMIT) {
+        // [SelfHeal-hybrid-reroute] WGC is stuck emitting black frames and its rebuild budget is
+        // exhausted. On a hybrid GPU this is the CG/exclusive-fullscreen stranding case: WGC (DWM
+        // composition capture) can't see the flipped-away surface, and there is no runtime exit back
+        // up to DXGI. Escalate one rung: after a cooldown, re-route through ForceReinitialize so
+        // Initialize retries DXGI (priority 1). If the flip has settled, DXGI resumes; if not, we fall
+        // back to WGC again and retry after the next cooldown. Non-hybrid path is untouched.
+        if (m_isHybridGPU) {
+            auto now = std::chrono::steady_clock::now();
+            bool firstAttempt = (m_lastWgcDxgiRerouteTime.time_since_epoch().count() == 0);
+            auto sinceReroute = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - m_lastWgcDxgiRerouteTime).count();
+            if (firstAttempt || sinceReroute >= WGC_REROUTE_COOLDOWN_MS) {
+                m_lastWgcDxgiRerouteTime = now;
+                HWND rerouteWnd = m_currentWindow;
+                DEBUG_LOG_FMT("[UnifiedCapture][SelfHeal] WGC stuck (hybrid, streak %d, rebuild limit %d reached) -> re-route to DXGI via ForceReinitialize",
+                    m_blackStreakCount, BLACK_STREAK_REBUILD_LIMIT);
+                // Re-arm the self-heal ladder so a fresh WGC stranding can rebuild again if needed.
+                m_blackStreakCount = 0;
+                m_goodStreakCount = 0;
+                m_blackStreakRebuildCount = 0;
+                if (rerouteWnd && ValidateWindow(rerouteWnd)) {
+                    try {
+                        ForceReinitialize(rerouteWnd);   // Release + Initialize -> retries DXGI (priority 1)
+                    } catch (...) {
+                        DEBUG_LOG_FMT("[UnifiedCapture][SelfHeal] WGC->DXGI re-route exception (swallowed)");
+                    }
+                } else {
+                    DEBUG_LOG_FMT("[UnifiedCapture][SelfHeal] WGC->DXGI re-route skipped: target window no longer valid");
+                }
+                return;
+            }
+        }
         if (m_blackStreakCount % 120 == 0) {
             DEBUG_LOG_FMT("[UnifiedCapture][SelfHeal] WGC bad-frame streak %d (rebuild limit %d reached) - logging only, no rebuild",
                 m_blackStreakCount, BLACK_STREAK_REBUILD_LIMIT);
