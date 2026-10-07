@@ -363,56 +363,18 @@ void CaptureMetrics::DrawHud(cv::Mat& target) const {
 
     Snapshot s = GetSnapshot();
     char buf[256];
-    int y = 20;
-    const int step = 20;
     const double scale = 0.5;
     const int thick = 1;
     const cv::Scalar good(0, 255, 0);
     const cv::Scalar warn(0, 255, 255);
-    const cv::Scalar bad(0, 80, 255);
 
-    // Line 1: identity + liveness.
+    // Line 1 (only): identity + liveness. The metrics HUD used to stack 5 lines from the
+    // top-left and occlude the sampled image / ROI display area, so it is trimmed to this
+    // single summary line. The full timing / frame-health / recovery-event stats remain
+    // available in the periodic [METRICS] report and the [STATUS] heartbeat log.
     auto headColor = (s.framesTotal > 0 && s.method == Method::GDI) ? warn : good;
     std::snprintf(buf, sizeof(buf), "FPS %5.1f | %s | %s | %dx%d",
                   m_recentFps, MethodName(s.method), StateName(s.state),
                   target.cols, target.rows);
-    cv::putText(target, buf, cv::Point(10, y), cv::FONT_HERSHEY_SIMPLEX, scale, headColor, thick);
-    y += step;
-
-    // Line 2: timing jitter -- the primary scheduling-strategy signal.
-    auto jitter = (s.intervalP99 > 50.0) ? bad : (s.intervalP95 > 25.0 ? warn : good);
-    std::snprintf(buf, sizeof(buf), "interval p50/p95/p99 = %.1f / %.1f / %.1f ms  max %.1f",
-                  s.intervalP50, s.intervalP95, s.intervalP99, s.intervalMax);
-    cv::putText(target, buf, cv::Point(10, y), cv::FONT_HERSHEY_SIMPLEX, scale, jitter, thick);
-    y += step;
-
-    // Line 3: capture + inference cost.
-    std::snprintf(buf, sizeof(buf), "capture avg/p95 = %.2f / %.2f ms | infer avg/p95 = %.2f / %.2f ms",
-                  s.captureAvg, s.captureP95, s.inferenceAvg, s.inferenceP95);
-    cv::putText(target, buf, cv::Point(10, y), cv::FONT_HERSHEY_SIMPLEX, scale, good, thick);
-    y += step;
-
-    // Line 4: frame health.
-    auto health = (s.failRatio > 1.0) ? bad : (s.framesFailed > 0 ? warn : good);
-    std::snprintf(buf, sizeof(buf), "frames %llu ok | %llu fail (%.2f%%) | black %llu | dup %llu | streak %llu",
-                  static_cast<unsigned long long>(s.framesOk),
-                  static_cast<unsigned long long>(s.framesFailed),
-                  s.failRatio,
-                  static_cast<unsigned long long>(s.framesBlack),
-                  static_cast<unsigned long long>(s.framesDuplicate),
-                  static_cast<unsigned long long>(s.maxFailStreak));
-    cv::putText(target, buf, cv::Point(10, y), cv::FONT_HERSHEY_SIMPLEX, scale, health, thick);
-    y += step;
-
-    // Line 5: discrete recovery events.
-    auto events = (s.downgrades > 0 || s.stateToStopped > 0) ? warn : good;
-    std::snprintf(buf, sizeof(buf), "downgrade %llu | upgrade %llu | pause %llu | stopped %llu | reinit f%llu/s%llu | focusLost %llu",
-                  static_cast<unsigned long long>(s.downgrades),
-                  static_cast<unsigned long long>(s.upgrades),
-                  static_cast<unsigned long long>(s.stateToPaused),
-                  static_cast<unsigned long long>(s.stateToStopped),
-                  static_cast<unsigned long long>(s.forceReinitCount),
-                  static_cast<unsigned long long>(s.softReinitCount),
-                  static_cast<unsigned long long>(s.focusLostCount));
-    cv::putText(target, buf, cv::Point(10, y), cv::FONT_HERSHEY_SIMPLEX, scale, events, thick);
+    cv::putText(target, buf, cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, scale, headColor, thick);
 }
