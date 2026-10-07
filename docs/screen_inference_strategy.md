@@ -172,6 +172,32 @@ m_foregroundStable = true ?
 | `WGC→DXGI (焦点恢复)` | - | 50ms | 加速恢复 |
 | `STOPPED_RECOVERY_MS` | 5000ms | 5000ms | Stopped 状态自动恢复 |
 
+### 2.8 兼容分流路由与混显选卡（当前实现）
+
+`Initialize()` 在选后端前先做一次**按显示器归属**的分流（不是按「高风险特征」升级）：
+
+```
+Initialize(HWND, bool)
+ ├─ compat_mode=force_legacy   → InitializeLegacy()       （原逻辑逐行平移）
+ ├─ compat_mode=force_enhanced → InitializeEnhanced()      （含 EnhancedCaptureRuntime）
+ └─ compat_mode=auto（默认）
+      ├─ GpuEnvironmentProbe::Detect() → m_isHybridGPU = (mux || amdHybrid)
+      ├─ DetectDisplayGPUType(hWnd)     → 0=iGPU 输出 / 1=dGPU 输出 / -1=未知
+      ├─ 显示器由 iGPU 驱动（Optimus 内屏）→ InitializeLegacy()   ← 常规混显本走这条
+      ├─ 显示器由 dGPU 驱动（MUX 直连）    → InitializeEnhanced()
+      └─ 未知(-1) → 回退 NeedsEnhancedCompat(env) 判定
+```
+
+> 曾有「iGPU 输出也按 MUX/HDR/VRR 等高风险特征升级到 Enhanced」的版本，实测对 NGR-Win64（无边框）等 iGPU-DDA 本就稳定的游戏反而引发 WGC `DEVICE_REMOVED` 抖动回归，**已回退为纯按输出归属选路**（见 `UnifiedScreenCapture.cpp` Initialize 段注释）。
+
+**DXGI 具体绑到哪块卡**（`DXGIScreenCapture::InitializeForWindow`）：
+- **默认**：枚举各适配器 output，选中「拥有目标显示器（`MonitorFromWindow`）的那块卡」建桌面复制。Optimus 内屏由 iGPU 驱动 → **自动绑核显**；iGPU 的 DDA 经 DWM 合成帧即可拿到 dGPU 渲染的内容（DWM 自动做跨卡拷贝）。
+- **dGPU-first 路径已成 dead code**：`TryInitializeOnDiscreteGPU` / `SetHybridGPUMode` 保留但不再被调用（Optimus 下独显无输出，那条必失败）。
+- **`BT_CAPTURE_PIN_IGPU=1`**（环境变量）：显式把 D3D 设备 + 复制**硬绑到 iGPU/APU**，绕过 monitor-match；失败软回退默认路径。用于 MUX/迁移可能挑错卡的机器。
+- **边缘回退**：若没有任何适配器 output 命中目标显示器，退而选「显存最大者」（=dGPU）。
+
+**降级链仍是 `DXGI→WGC→GDI`，但只对「真实取帧失败」生效**：空帧/黑帧/白帧（`ValidateFrame` 判否）**按设计不累计 `m_consecutiveErrors`**，因此既不降级、也不触发 DXGI 重建——这是 WGC 会话劣化后「半失效停走」的根源，也是 FC6 混显「MPO 陈旧帧卡死」无法靠降级/重建自愈的原因（详见 `wgc-blackframe-flapping-diagnosis-and-hardening.md`）。WGC 在混显下另有反向回 DXGI 的路径（焦点恢复升级 / hybrid re-route），故实际形态常为 DXGI↔WGC 抖动而非单向落定。
+
 ---
 
 ## 3. 焦点切换处理策略
@@ -245,10 +271,14 @@ inferenceThreadLoop():
 
 ```cpp
 // 防止 OpenCV 窗口抢夺游戏前台焦点
-SetWindowPos(cvWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+SetWindowPos(cvWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 ```
 
-不使用 `SWP_NOACTIVATE` 会导致每次 `imshow()` 后 OpenCV 窗口被激活，游戏失焦触发 `pauseAsyncInference()` + `Release()`，游戏卡顿时反复抢焦→释放→重连，引发资源竞争崩溃。
+真正防抢焦点的是 **`SWP_NOACTIVATE`**（不激活窗口）。缺少它会导致每次 `imshow()` 后 OpenCV 窗口被激活，游戏失焦触发 `pauseAsyncInference()` + `Release()`，游戏卡顿时反复抢焦→释放→重连，引发资源竞争崩溃。
+
+注意两点：
+- `HWND_NOTOPMOST` 只决定 **Z 序**（不置顶），与是否抢焦点无关；不要把它和「防抢焦」混为一谈。
+- 该窗口**仅在 `[Log] show = true` 时才创建**；生产环境 show 隐藏，根本没有窗口，也就不存在抢焦问题。
 
 ---
 

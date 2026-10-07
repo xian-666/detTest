@@ -108,16 +108,17 @@ Initialize(HWND, bool)
     └── compat_mode=auto (默认)
            │
            ├── GpuEnvironmentProbe::Detect() [纯只读: WMI/SetupAPI/注册表]
+           │      → m_isHybridGPU = (isHybridWithMux || isAmdApuHybrid)
            │
-           ├── 高风险 → InitializeEnhanced() [含 EnhancedCaptureRuntime]
-           │      Intel Arc iGPU + 主屏直连
-           │      NVIDIA Optimus + MUX Switch
-           │      AMD APU + dGPU 混合
-           │      HDR / 自适应刷新率 / 高DPI
-           │      Intel Arc 驱动 < 31.0.101.5972
+           ├── DetectDisplayGPUType(hWnd) [目标窗口所在显示器由哪块 GPU 驱动]
+           │      ├── 显示器接 iGPU (Optimus 内屏) → InitializeLegacy()  ← 常规混显本走这条
+           │      ├── 显示器接 dGPU (MUX 直连)     → InitializeEnhanced() [含 EnhancedCaptureRuntime]
+           │      └── 未知(-1) → 回退 NeedsEnhancedCompat(env) 判定
            │
-           └── 低风险 → InitializeLegacy() [二进制级别一致]
+           └── 说明：不再按「MUX/HDR/VRR/Intel Arc」等高风险特征把 iGPU 输出升级到 Enhanced
 ```
+
+> 曾有「iGPU 输出也按高风险特征升级到 Enhanced」的版本，实测对 NGR-Win64（无边框）等 iGPU-DDA 本就稳定的游戏反而引发 WGC `DEVICE_REMOVED` 抖动回归，**已回退为纯按显示器归属选路**。
 
 #### compat_mode 配置
 
@@ -169,6 +170,9 @@ Idle ──[Initialize]──► Capturing
 
 #### 混合显卡优化
 
+- **DXGI 自动绑核显**：`InitializeForWindow` 默认按 `MonitorFromWindow` 选中「驱动目标显示器的适配器」建桌面复制——Optimus 内屏由 iGPU 驱动即**自动绑核显**，iGPU 的 DDA 经 DWM 合成帧拿到 dGPU 渲染内容。`TryInitializeOnDiscreteGPU` / `SetHybridGPUMode`（dGPU-first）已成为 **dead code**（Optimus 下独显无输出，必失败）。
+- **`BT_CAPTURE_PIN_IGPU=1`**（环境变量）：显式把 D3D 设备 + 复制硬绑到 iGPU/APU，绕过 monitor-match；失败软回退默认路径。用于 MUX/迁移可能挑错卡的机器。
+- **黑/白/空帧不计错误**：`ValidateFrame` 判否的帧不累计 `m_consecutiveErrors`，因此既不降级也不触发 DXGI 重建——WGC「半失效停走」与 FC6「MPO 陈旧帧卡死」都无法靠降级/重建自愈（详见 `wgc-blackframe-flapping-diagnosis-and-hardening.md`）。
 - **SoftReinitialize**：焦点恢复时优先保留现有 capture session，采集 warmup 帧自我验证，避免破坏性 Release+Initialize
 - **长切出改进**：动态 warmup 帧数（<10s=30帧, 10-120s=60帧, >120s=120帧），多阶段尝试（最多 3 轮），窗口大小变化检测
 - **IsFrameAlive**：同时检测纯黑/纯白 + 帧间差异（防止 stale buffer）
@@ -498,6 +502,7 @@ LsRs ROI 分类结果
 | `game-launch-crash.env` | 崩溃诊断环境变量 |
 | `GameUserSettings.ini` | 游戏配置文件：ResolutionSizeX/Y（屏幕比例检测备选） |
 | 环境变量 `BT_CAPTURE_COMPAT_MODE` | 兼容模式配置：auto / force_enhanced / force_legacy |
+| 环境变量 `BT_CAPTURE_PIN_IGPU` | =1 时把 DXGI/WGC 的 D3D 设备硬绑到 iGPU/APU（绕过 monitor-match，失败软回退） |
 | 环境变量 `ONNX_FORCE_CPU` | 强制 CPU 推理诊断开关 |
 
 ---

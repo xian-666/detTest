@@ -204,4 +204,7 @@ downgrade↑ → fail↑ / maxFailStreak↑ → black↑ → forceReinit↑ → 
 - **模型**：沿用的是王者的分类模型（`HONOR` 文件），同样只为验证推理管线正常。
 - **屏幕比例探测**：`common/ScreenAspectDetector.hpp` 会去读 `%LOCALAPPDATA%\NGR\...\GameUserSettings.ini`（王者的 UE 配置），对另外两款游戏读不到时会回退，不影响采集，只是取不到游戏内分辨率。
 - **`Component/` 目录**：历史上被 `.gitignore` 排除且未纳入版本控制，纯净 clone 会编译失败。若遇到同样情况，注意 `.gitignore` 里已相应修正。
+- **混显自动绑核显（无需手动配置）**：`DXGIScreenCapture::InitializeForWindow` 默认按显示器归属（`MonitorFromWindow`）选卡，Optimus 内屏由 iGPU 驱动即自动落到核显；iGPU 的 DDA 经 DWM 合成帧能拿到独显渲染的内容。dGPU-first 路径已是 dead code。若 MUX/迁移挑错卡，可用环境变量 `BT_CAPTURE_PIN_IGPU=1` 强制硬绑核显。
+- **孤岛惊魂6（混显冷启动 CG 卡死）——已知限制**：根因是 FC6 走 dGPU 渲染 + 独立翻转/MPO **绕过 DWM 合成**，iGPU 上的 DDA 只看到同一张静止的合成图（表现为“卡在开局画面、非黑”），既不是 device-lost、又是“有效但静止”的帧，**不会触发降级/重建**，无法自愈。实测：切 WGC（混显下 `deviceRemoved`）、原地重建 duplication（新复制对象仍读到同一张没更新的图）、调 device-lost 退避（会连累其它游戏 CG）均无效或有害。生产 show 必须隐藏，无法用“置顶逼 DWM 重合成”绕过；隐形置顶辅助窗有触发反外挂 overlay 指纹的风险。**结论：FC6 在这类混显本上采用「游戏启动完成后再启动 AI」（后开 AI）**——把采集 attach 错开 FC6 冷启动的设备风暴/呈现建立窗口即可正常。
+- **混显冷启动宽限期与有界复探（`detTest.cpp`）**：A. 首次 attach 前，混显上等待前台目标稳定 `kHybridColdStartGraceMs`（=10000ms）再初始化，规避开局脆弱窗口（HWND 变化则重新计时）；B. 黑屏期间做“有界复探”（≤30000ms、≤2 次）。这些是 detTest 主循环层的时序规避，**不改共享采图恢复核心**。
 
